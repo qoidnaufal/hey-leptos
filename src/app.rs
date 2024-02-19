@@ -3,21 +3,18 @@ use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
 
-mod chat_page;
-pub mod login_register_page;
+mod chat;
+mod home;
+mod login;
+mod register;
 
 #[component]
 pub fn App() -> impl IntoView {
-    // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
 
     view! {
         <Stylesheet id="leptos" href="/pkg/hey-leptos.css"/>
-
-        // sets the document title
         <Title text="HEY!"/>
-
-        // content for this welcome page
         <Router fallback=|| {
             let mut outside_errors = Errors::default();
             outside_errors.insert_with_default_key(AppError::NotFound);
@@ -25,20 +22,53 @@ pub fn App() -> impl IntoView {
         }>
             <main class="grid h-screen place-items-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
                 <Routes>
-                    <Route path="/" view=chat_page::ChatPage/>
-                    <Route path="/reg" view=login_register_page::RegisterPage/>
-                    <Route path="/log" view=login_register_page::LoginPage/>
+                    <Route path="/" view=HomeOrChat/>
+                    <Route path="/register" view=register::RegisterPage/>
+                    <Route path="/login" view=login::LoginPage/>
                 </Routes>
             </main>
         </Router>
     }
 }
 
-/// Renders the home page of your application.
 #[component]
-fn HomePage() -> impl IntoView {
-    // Creates a reactive value to update the button
+fn HomeOrChat() -> impl IntoView {
     view! {
-        <p>"Add something here"</p>
+        <Await
+            future=|| authenticate()
+            children=|session| {
+                if let Ok(true) = session.clone().map(|v| v.clone()) {
+                    view! { <chat::ChatPage/> }
+                } else {
+                    view! { <home::HomePage/> }
+                }
+            }
+        />
+    }
+}
+
+#[server]
+async fn authenticate() -> Result<bool, ServerFnError> {
+    use crate::auth_model::ssr::{auth, db};
+
+    let auth = auth()?;
+    let db = db()?;
+
+    if auth.is_authenticated() {
+        match &auth.current_user {
+            Some(user) => {
+                if db.get_user_by_id(&user.uuid).await.is_some() {
+                    auth.login_user(user.uuid.clone());
+                    auth.remember_user(true);
+
+                    Ok(true)
+                } else {
+                    Err(ServerFnError::new("Invalid auth session!"))
+                }
+            }
+            None => Err(ServerFnError::new("Invalid auth session!")),
+        }
+    } else {
+        Err(ServerFnError::new("Auth session isn't authenticated!"))
     }
 }
