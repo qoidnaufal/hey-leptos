@@ -1,11 +1,35 @@
 use crate::db;
-use axum::extract::FromRef;
+use axum::extract::{ws::Message, FromRef};
 use leptos::LeptosOptions;
 use leptos_router::RouteListing;
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
+use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Clone, FromRef, Debug)]
 pub struct AppState {
     pub db: db::ssr::Database,
+    pub room: Room,
     pub leptos_options: LeptosOptions,
     pub routes: Vec<RouteListing>,
+}
+
+pub type Room = Arc<RwLock<HashMap<String, UserConn>>>;
+
+#[derive(Clone, Default, Debug)]
+pub struct UserConn {
+    pub user_name: String,
+    pub uuid: String,
+    pub status: ConStatus,
+    pub sender: Option<UnboundedSender<Message>>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub enum ConStatus {
+    Connected,
+    #[default]
+    Disconnected,
 }

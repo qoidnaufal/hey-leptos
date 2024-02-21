@@ -6,6 +6,8 @@ pub mod error_template;
 pub mod fileserv;
 #[cfg(feature = "ssr")]
 pub mod state;
+#[cfg(feature = "ssr")]
+pub mod ws;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
