@@ -1,7 +1,7 @@
 #[cfg(feature = "ssr")]
 use axum::{
     body::Body as AxumBody,
-    extract::{Path, State},
+    extract::State,
     http::Request,
     response::{IntoResponse, Response},
     routing::get,
@@ -18,19 +18,20 @@ use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRou
 use surrealdb::engine::remote::ws::Client as SurrealClient;
 
 #[cfg(feature = "ssr")]
-use hey_leptos::auth_model::ssr::AuthSession;
-#[cfg(feature = "ssr")]
-use hey_leptos::{app, auth_model::UserData, db, fileserv::file_and_error_handler, state};
+use hey_leptos::{
+    app,
+    auth_model::{ssr::AuthSession, UserData},
+    db,
+    fileserv::file_and_error_handler,
+    state, ws,
+};
 
 #[cfg(feature = "ssr")]
 async fn server_fn_handler(
     State(app_state): State<state::AppState>,
     auth_session: AuthSession,
-    path: Path<String>,
     request: Request<AxumBody>,
 ) -> impl IntoResponse {
-    logging::log!("{:?}", path);
-
     handle_server_fns_with_context(
         move || {
             provide_context(auth_session.clone());
@@ -66,6 +67,8 @@ async fn main() -> std::io::Result<()> {
         .await
         .map_err(|err| std::io::Error::other(err))?;
 
+    let room = state::Room::default();
+
     let conf = get_configuration(None)
         .await
         .map_err(|err| std::io::Error::other(format!("{:?}", err)))?;
@@ -89,10 +92,12 @@ async fn main() -> std::io::Result<()> {
         db: db.clone(),
         leptos_options: leptos_options.clone(),
         routes: app_routes.clone(),
+        room,
     };
 
     // Router
     let router = Router::new()
+        .route("/ws", get(ws::ws_handler))
         .route(
             "/api/*fn_name",
             get(server_fn_handler).post(server_fn_handler),

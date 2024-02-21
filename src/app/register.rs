@@ -8,7 +8,6 @@ async fn register(user_name: String, email: String, password: String) -> Result<
     use crate::auth_model::ssr::db;
     use crate::auth_model::UserData;
     use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
-    use leptos::logging;
     use rand_core::OsRng;
     use uuid::Uuid;
 

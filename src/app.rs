@@ -6,6 +6,7 @@ use leptos_router::*;
 mod chat;
 mod home;
 mod login;
+mod logout;
 mod register;
 
 #[component]
