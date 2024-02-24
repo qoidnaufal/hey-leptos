@@ -1,33 +1,38 @@
-use leptos::{
-    component, create_server_action, ev::SubmitEvent, server, view, IntoView, ServerFnError,
-};
+use leptos::*;
 use leptos_router::{ActionForm, FromFormData};
 
 #[server(RegisterUser)]
 async fn register(user_name: String, email: String, password: String) -> Result<(), ServerFnError> {
-    use crate::auth_model::ssr::db;
-    use crate::auth_model::UserData;
+    use crate::auth_model::pool;
+    use crate::user_model::{Availability, UserData};
     use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
     use rand_core::OsRng;
     use uuid::Uuid;
 
-    let db = db()?;
+    let pool = pool()?;
 
-    let salt = SaltString::generate(&mut OsRng);
-    let password = Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|err| ServerFnError::<std::io::Error>::ServerError(format!("{:?}", err)))
-        .map(|pw| pw.to_string())?;
+    match UserData::check_availability_by_email(&email, &pool).await {
+        Availability::Available => {
+            let salt = SaltString::generate(&mut OsRng);
+            let password = Argon2::default()
+                .hash_password(password.as_bytes(), &salt)
+                .map_err(|err| ServerFnError::<std::io::Error>::ServerError(format!("{:?}", err)))
+                .map(|pw| pw.to_string())?;
 
-    let uuid = Uuid::new_v4().as_simple().to_string();
-    let new_user = UserData::new(uuid.clone(), user_name.clone(), email, password);
+            let uuid = Uuid::new_v4().as_simple().to_string();
+            let new_user = UserData::new(uuid, user_name, email.clone(), password);
 
-    match db.register_user(uuid, new_user).await {
-        Ok(_) => {
-            leptos_axum::redirect("/login");
-            Ok(())
+            match new_user.insert_into_db(pool).await {
+                Ok(_) => {
+                    leptos_axum::redirect("/login");
+                    Ok(())
+                }
+                Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
+            }
         }
-        Err(err) => Err(ServerFnError::ServerError(format!("{:?}", err))),
+        _ => Err(ServerFnError::new(
+            "This email is unavailable to create account",
+        )),
     }
 }
 
@@ -35,9 +40,9 @@ async fn register(user_name: String, email: String, password: String) -> Result<
 pub fn RegisterPage() -> impl IntoView {
     let register_user = create_server_action::<RegisterUser>();
 
-    let on_submit = move |ev: SubmitEvent| {
+    let on_submit = move |ev: ev::SubmitEvent| {
         let data = RegisterUser::from_event(&ev);
-        if data.is_err() || !data.unwrap().password.contains("@") {
+        if data.is_err() {
             ev.prevent_default();
         }
     };
@@ -83,5 +88,6 @@ pub fn RegisterPage() -> impl IntoView {
                 "now!"
             </p>
         </div>
+
     }
 }

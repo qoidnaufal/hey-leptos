@@ -3,7 +3,7 @@ use leptos_router::ActionForm;
 
 #[server(UserLogout)]
 async fn logout() -> Result<(), ServerFnError> {
-    use crate::auth_model::ssr::auth;
+    use crate::auth_model::auth;
 
     let auth = auth()?;
     auth.logout_user();
