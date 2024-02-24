@@ -2,20 +2,52 @@ use crate::app::logout::LogoutButton;
 use leptos::*;
 use leptos_use::{use_websocket, UseWebsocketReturn};
 
+// #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+// pub struct OnlineUser {
+//     pub uuid: String,
+//     pub user_name: String,
+// }
+
+// #[server(TrackRoom)]
+// async fn track_room() -> Result<Vec<OnlineUser>, ServerFnError> {
+//     use crate::state::Room;
+
+//     let room =
+//         use_context::<Room>().ok_or_else(|| ServerFnError::new("No database is detected!"))?;
+
+//     let online = room
+//         .read()
+//         .expect("Unable to read the room")
+//         .iter()
+//         .map(|(_, user)| OnlineUser {
+//             uuid: user.uuid.clone(),
+//             user_name: user.user_name.clone(),
+//         })
+//         .collect::<Vec<_>>();
+
+//     Ok(online)
+// }
+
+// #[component]
+// fn OnlineList() -> impl IntoView {
+//     let _on_load = create_server_action::<TrackRoom>();
+//     let resource = create_resource(|| (), |_| async move { track_room().await });
+//     view! {
+//         {move || match resource.get() {
+//             None => view! { <p>"Loading..."</p> }.into_view(),
+//             Some(data) => view! {
+//                 <ul>
+//                     { data.unwrap().iter().map(move |user| view! {<li>{user.user_name.clone()}</li>}).collect_view() }
+//                 </ul>
+//             }.into_view()
+//         }}
+//     }
+// }
+
 #[component]
 pub fn ChatPage() -> impl IntoView {
     let (history, set_history) = create_signal(vec![]);
     let update_history = move |message: String| set_history.update(|history| history.push(message));
-
-    // let (url, set_url) = create_signal(String::new());
-    // let update_url = move |ws_addr: String| set_url.update(|url| url.push_str(&ws_addr));
-
-    // create_effect(move |_| {
-    //     let ws_addr = format!("ws://{}/ws", window().location().host().unwrap());
-    //     update_url(ws_addr);
-    // });
-
-    // logging::log!("{:?}", url.get_untracked());
 
     let ws_addr = "ws://localhost:4321/ws";
 
@@ -64,7 +96,9 @@ pub fn ChatPage() -> impl IntoView {
                     <p class="text-green-400 font-sans">{ status }</p>
                     <LogoutButton/>
                 </div>
-                <div class="grow w-full bg-slate-800/[.65] rounded-bl-xl"></div>
+                <div class="grow w-full bg-slate-800/[.65] rounded-bl-xl">
+                    // <OnlineList/>
+                </div>
             </div>
             <div class="h-full bg-transparent grow flex flex-col" id="chat">
                 <div class="grow bg-transparent px-4" id="chat-log">

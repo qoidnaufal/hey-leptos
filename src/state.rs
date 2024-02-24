@@ -1,4 +1,4 @@
-use crate::db;
+use crate::db::Database;
 use axum::extract::{ws::Message, FromRef};
 use leptos::LeptosOptions;
 use leptos_router::RouteListing;
@@ -11,12 +11,13 @@ use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Clone, FromRef, Debug)]
 pub struct AppState {
-    pub db: db::ssr::Database,
+    pub pool: Database,
     pub room: Room,
     pub leptos_options: LeptosOptions,
     pub routes: Vec<RouteListing>,
 }
 
+// key is email
 pub type Room = Arc<RwLock<HashMap<String, UserConn>>>;
 
 #[derive(Clone, Default, Debug)]

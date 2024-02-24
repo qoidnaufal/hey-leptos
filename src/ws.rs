@@ -1,26 +1,34 @@
 use crate::{
-    auth_model::ssr::AuthSession,
+    auth_model::AuthSession,
     state::{AppState, ConStatus, Room, UserConn},
+    user_model::UserData,
 };
 use axum::{
     extract::{
-        ws::{rejection::WebSocketUpgradeRejection, Message, WebSocket},
+        ws::{Message, WebSocket},
         State, WebSocketUpgrade,
     },
-    response::IntoResponse,
+    response::{ErrorResponse, IntoResponse},
 };
 use futures::{SinkExt, StreamExt};
 use leptos::*;
 use tokio::sync::mpsc;
 
+#[axum::debug_handler]
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(app_state): State<AppState>,
     auth_session: AuthSession,
-) -> Result<impl IntoResponse, WebSocketUpgradeRejection> {
-    let db = app_state.db.clone();
-    let uuid = auth_session.id;
-    let user_data = db.get_user_by_id(&uuid).await.unwrap();
+) -> Result<impl IntoResponse, ErrorResponse> {
+    let pool = app_state.pool.clone();
+    let current_user = auth_session
+        .current_user
+        .expect("There's no current user detected from auth session!");
+    let uuid = current_user.uuid;
+
+    let user_data = UserData::get_from_id(&uuid, &pool)
+        .await
+        .expect("There's no user with that id");
 
     let user_conn = UserConn {
         user_name: user_data.user_name,
@@ -69,7 +77,6 @@ async fn ws_connection(socket: WebSocket, email: String, room: Room) {
     while let Some(Ok(message)) = receiver.next().await {
         logging::log!("message received: {:?}", message);
         broadcast_msg(message, &email, &room).await;
-        // broadcast_msg(message, tx.clone()).await;
     }
 
     user_conn.status = ConStatus::Disconnected;
@@ -80,7 +87,6 @@ async fn ws_connection(socket: WebSocket, email: String, room: Room) {
 }
 
 async fn broadcast_msg(msg: Message, email: &String, room: &Room) {
-    logging::log!("{:?}", room);
     for (other_email, user) in room.read().unwrap().iter() {
         if let (Some(tx), Message::Text(_)) = (user.sender.clone(), msg.clone()) {
             if other_email != email {

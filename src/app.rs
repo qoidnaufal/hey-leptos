@@ -36,9 +36,9 @@ pub fn App() -> impl IntoView {
 fn HomeOrChat() -> impl IntoView {
     view! {
         <Await
-            future=|| authenticate()
-            children=|session| {
-                if let Ok(true) = session.clone().map(|v| v.clone()) {
+            future=authenticate
+            children=|is_auth| {
+                if let Ok(true) = is_auth {
                     view! { <chat::ChatPage/> }
                 } else {
                     view! { <home::HomePage/> }
@@ -50,15 +50,16 @@ fn HomeOrChat() -> impl IntoView {
 
 #[server]
 async fn authenticate() -> Result<bool, ServerFnError> {
-    use crate::auth_model::ssr::{auth, db};
+    use crate::auth_model::{auth, pool};
+    use crate::user_model::UserData;
 
     let auth = auth()?;
-    let db = db()?;
+    let pool = pool()?;
 
     if auth.is_authenticated() {
         match &auth.current_user {
             Some(user) => {
-                if db.get_user_by_id(&user.uuid).await.is_some() {
+                if UserData::get_from_id(&user.uuid, &pool).await.is_some() {
                     auth.login_user(user.uuid.clone());
                     auth.remember_user(true);
 
@@ -67,7 +68,7 @@ async fn authenticate() -> Result<bool, ServerFnError> {
                     Err(ServerFnError::new("Invalid auth session!"))
                 }
             }
-            None => Err(ServerFnError::new("Invalid auth session!")),
+            None => Err(ServerFnError::new("Auth session contains no user!")),
         }
     } else {
         Err(ServerFnError::new("Auth session isn't authenticated!"))

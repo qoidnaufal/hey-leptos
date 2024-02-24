@@ -3,17 +3,17 @@ use leptos_router::ActionForm;
 
 #[server(UserLogin)]
 async fn login(email: String, password: String) -> Result<(), ServerFnError> {
-    use crate::auth_model::ssr::{auth, db};
+    use crate::auth_model::{auth, pool};
+    use crate::user_model::UserData;
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
     use leptos::logging;
 
-    let db = db()?;
+    let pool = pool()?;
     let auth = auth()?;
 
-    let user = db
-        .get_user_by_email(&email)
+    let user = UserData::get_from_email(&email, &pool)
         .await?
-        .ok_or_else(|| ServerFnError::new("User does not exist".to_string()))?;
+        .expect("User doesn't exist");
 
     let parsed_password =
         PasswordHash::new(&user.password).map_err(|err| ServerFnError::new(format!("{}", err)))?;

@@ -1,68 +1,39 @@
-use serde::{Deserialize, Serialize};
+pub use crate::{db::Database, user_model::UserData};
+pub use async_trait::async_trait;
+pub use axum_session_auth::{Authentication, SessionSurrealPool};
+pub use leptos::{use_context, ServerFnError};
+pub use surrealdb::engine::remote::ws::Client;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserData {
-    pub uuid: String,
-    pub user_name: String,
-    pub email: String,
-    pub password: String,
+pub type AuthSession =
+    axum_session_auth::AuthSession<UserData, String, SessionSurrealPool<Client>, Database>;
+
+pub fn pool() -> Result<Database, ServerFnError> {
+    use_context::<Database>().ok_or_else(|| ServerFnError::new("No database is detected!"))
 }
 
-impl UserData {
-    pub fn new(uuid: String, user_name: String, email: String, password: String) -> Self {
-        Self {
-            uuid,
-            user_name,
-            email,
-            password,
-        }
-    }
+pub fn auth() -> Result<AuthSession, ServerFnError> {
+    use_context::<AuthSession>().ok_or_else(|| ServerFnError::new("No AuthSession is detected!"))
 }
 
-#[cfg(feature = "ssr")]
-pub mod ssr {
-    pub use super::UserData;
-    pub use crate::db::ssr::Database;
-    pub use async_trait::async_trait;
-    pub use axum_session_auth::{Authentication, SessionSurrealPool};
-    pub use leptos::{use_context, ServerFnError};
-    pub use surrealdb::engine::remote::ws::Client;
+#[async_trait]
+impl Authentication<UserData, String, Database> for UserData {
+    async fn load_user(userid: String, pool: Option<&Database>) -> Result<UserData, anyhow::Error> {
+        let pool = pool.expect("Pool doesn't exist!");
 
-    pub type AuthSession =
-        axum_session_auth::AuthSession<UserData, String, SessionSurrealPool<Client>, Database>;
-
-    pub fn db() -> Result<Database, ServerFnError> {
-        use_context::<Database>().ok_or_else(|| ServerFnError::new("No database is detected!"))
+        UserData::get_from_id(&userid, &pool)
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Can't get the user!"))
     }
 
-    pub fn auth() -> Result<AuthSession, ServerFnError> {
-        use_context::<AuthSession>()
-            .ok_or_else(|| ServerFnError::new("No AuthSession is detected!"))
+    fn is_authenticated(&self) -> bool {
+        true
     }
 
-    #[async_trait]
-    impl Authentication<UserData, String, Database> for UserData {
-        async fn load_user(
-            userid: String,
-            pool: Option<&Database>,
-        ) -> Result<UserData, anyhow::Error> {
-            let db = pool.unwrap();
+    fn is_active(&self) -> bool {
+        true
+    }
 
-            db.get_user_by_id(&userid)
-                .await
-                .ok_or_else(|| anyhow::anyhow!("Cannot get user"))
-        }
-
-        fn is_authenticated(&self) -> bool {
-            true
-        }
-
-        fn is_active(&self) -> bool {
-            true
-        }
-
-        fn is_anonymous(&self) -> bool {
-            false
-        }
+    fn is_anonymous(&self) -> bool {
+        false
     }
 }

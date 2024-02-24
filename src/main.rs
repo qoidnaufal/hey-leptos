@@ -11,6 +11,7 @@ use axum::{
 use axum_session::{SessionConfig, SessionLayer, SessionStore};
 #[cfg(feature = "ssr")]
 use axum_session_auth::{AuthConfig, AuthSessionLayer, SessionSurrealPool};
+#[cfg(feature = "ssr")]
 use leptos::*;
 #[cfg(feature = "ssr")]
 use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes};
@@ -19,11 +20,8 @@ use surrealdb::engine::remote::ws::Client as SurrealClient;
 
 #[cfg(feature = "ssr")]
 use hey_leptos::{
-    app,
-    auth_model::{ssr::AuthSession, UserData},
-    db,
-    fileserv::file_and_error_handler,
-    state, ws,
+    app, auth_model::AuthSession, db, fileserv::file_and_error_handler, state,
+    user_model::UserData, ws,
 };
 
 #[cfg(feature = "ssr")]
@@ -35,7 +33,8 @@ async fn server_fn_handler(
     handle_server_fns_with_context(
         move || {
             provide_context(auth_session.clone());
-            provide_context(app_state.db.clone());
+            provide_context(app_state.pool.clone());
+            provide_context(app_state.room.clone());
         },
         request,
     )
@@ -53,7 +52,8 @@ async fn leptos_routes_handler(
         app_state.routes.clone(),
         move || {
             provide_context(auth_session.clone());
-            provide_context(app_state.db.clone());
+            provide_context(app_state.pool.clone());
+            provide_context(app_state.room.clone());
         },
         app::App,
     );
@@ -63,7 +63,7 @@ async fn leptos_routes_handler(
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let db = db::ssr::Database::init()
+    let pool = db::Database::init()
         .await
         .map_err(|err| std::io::Error::other(err))?;
 
@@ -81,7 +81,7 @@ async fn main() -> std::io::Result<()> {
     let session_config = SessionConfig::default().with_table_name("user_sessions");
     let auth_config = AuthConfig::<String>::default();
     let session_store = SessionStore::<SessionSurrealPool<SurrealClient>>::new(
-        Some(db.clone().client.into()),
+        Some(pool.clone().client.into()),
         session_config,
     )
     .await
@@ -89,7 +89,7 @@ async fn main() -> std::io::Result<()> {
 
     // AppState
     let app_state = state::AppState {
-        db: db.clone(),
+        pool: pool.clone(),
         leptos_options: leptos_options.clone(),
         routes: app_routes.clone(),
         room,
@@ -109,8 +109,8 @@ async fn main() -> std::io::Result<()> {
                 UserData,
                 String,
                 SessionSurrealPool<SurrealClient>,
-                db::ssr::Database,
-            >::new(Some(db.clone()))
+                db::Database,
+            >::new(Some(pool.clone()))
             .with_config(auth_config),
         )
         .layer(SessionLayer::new(session_store))
