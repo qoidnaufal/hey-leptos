@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-axum = { version = "0.7", features = ["macros", "ws"], optional = true }
+axum = { version = "0.7", features = ["macros", "tokio"], optional = true }
 console_error_panic_hook = "0.1"
 leptos = { version = "0.6", features = ["nightly"] }
 leptos_axum = { version = "0.6", optional = true }
@@ -32,8 +32,9 @@ anyhow = "1.0.79"
 argon2 = "0.5.3"
 rand_core = { version = "0.6.4", features = ["std"] }
 leptos-use = "0.10.2"
-# leptos-use = { version = "0.10.2", features = ["ssr"] }
 futures = { version = "0.3.30", optional = true }
+fred = { version = "8.0.4", features = ["redis-stack", "redis-json", "subscriber-client"], optional = true }
+tokio-stream = "0.1.14"
 
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]
@@ -41,18 +42,18 @@ ssr = [
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
-    # "leptos-use/ssr",
+    "dep:leptos_axum",
     "dep:axum",
     "dep:tokio",
     "dep:tower",
-    "dep:tower-http",
-    "dep:leptos_axum",    
+    "dep:tower-http",        
     "dep:tracing",
     "dep:surrealdb",
     "dep:axum_session",
     "dep:axum_session_auth",
     "dep:async-trait",
     "dep:futures",
+    "dep:fred",
 ]
 
 # Defines a size-optimized profile for the WASM bundle in release mode

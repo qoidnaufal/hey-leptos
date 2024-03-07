@@ -32,3 +32,10 @@ impl Database {
         })
     }
 }
+
+pub trait IntoDb {
+    fn insert_into_db(
+        &self,
+        pool: &Database,
+    ) -> impl std::future::Future<Output = Result<(), surrealdb::Error>> + Send;
+}

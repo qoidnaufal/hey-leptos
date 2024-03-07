@@ -20,8 +20,15 @@ use surrealdb::engine::remote::ws::Client as SurrealClient;
 
 #[cfg(feature = "ssr")]
 use hey_leptos::{
-    app, auth_model::AuthSession, db, fileserv::file_and_error_handler, state,
-    user_model::UserData, ws,
+    app,
+    auth_model::AuthSession,
+    db,
+    fileserv::file_and_error_handler,
+    // messaging,
+    // ws,
+    rooms_manager,
+    state,
+    user_model::UserData,
 };
 
 #[cfg(feature = "ssr")]
@@ -34,7 +41,7 @@ async fn server_fn_handler(
         move || {
             provide_context(auth_session.clone());
             provide_context(app_state.pool.clone());
-            provide_context(app_state.room.clone());
+            provide_context(app_state.rooms_manager.clone());
         },
         request,
     )
@@ -53,7 +60,7 @@ async fn leptos_routes_handler(
         move || {
             provide_context(auth_session.clone());
             provide_context(app_state.pool.clone());
-            provide_context(app_state.room.clone());
+            provide_context(app_state.rooms_manager.clone());
         },
         app::App,
     );
@@ -67,7 +74,7 @@ async fn main() -> std::io::Result<()> {
         .await
         .map_err(|err| std::io::Error::other(err))?;
 
-    let room = state::Room::default();
+    let rooms_manager = rooms_manager::ssr::RoomsManager::new();
 
     let conf = get_configuration(None)
         .await
@@ -92,12 +99,12 @@ async fn main() -> std::io::Result<()> {
         pool: pool.clone(),
         leptos_options: leptos_options.clone(),
         routes: app_routes.clone(),
-        room,
+        rooms_manager,
     };
 
     // Router
     let router = Router::new()
-        .route("/ws", get(ws::ws_handler))
+        // .route("/channel/:room_uuid", get(messaging::msg_subscriber))
         .route(
             "/api/*fn_name",
             get(server_fn_handler).post(server_fn_handler),

@@ -3,8 +3,10 @@ use leptos_router::{ActionForm, FromFormData};
 
 #[server(RegisterUser)]
 async fn register(user_name: String, email: String, password: String) -> Result<(), ServerFnError> {
-    use crate::auth_model::pool;
-    use crate::user_model::{Availability, UserData};
+    use crate::{
+        state::pool,
+        user_model::{Availability, UserData},
+    };
     use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
     use rand_core::OsRng;
     use uuid::Uuid;
@@ -22,7 +24,7 @@ async fn register(user_name: String, email: String, password: String) -> Result<
             let uuid = Uuid::new_v4().as_simple().to_string();
             let new_user = UserData::new(uuid, user_name, email.clone(), password);
 
-            match new_user.insert_into_db(pool).await {
+            match new_user.insert_into_db(&pool).await {
                 Ok(_) => {
                     leptos_axum::redirect("/login");
                     Ok(())
@@ -30,9 +32,7 @@ async fn register(user_name: String, email: String, password: String) -> Result<
                 Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
             }
         }
-        _ => Err(ServerFnError::new(
-            "This email is unavailable to create account",
-        )),
+        _ => Err(ServerFnError::new("Email has already been used")),
     }
 }
 
@@ -40,7 +40,7 @@ async fn register(user_name: String, email: String, password: String) -> Result<
 pub fn RegisterPage() -> impl IntoView {
     let register_user = create_server_action::<RegisterUser>();
 
-    let on_submit = move |ev: ev::SubmitEvent| {
+    let validate = move |ev: ev::SubmitEvent| {
         let data = RegisterUser::from_event(&ev);
         if data.is_err() {
             ev.prevent_default();
@@ -74,7 +74,7 @@ pub fn RegisterPage() -> impl IntoView {
                 />
                 <button
                     type="submit"
-                    on:submit=on_submit
+                    on:submit=validate
                     class="mt-5 w-full bg-sky-500 hover:bg-green-300 rounded-lg border-0 w-fit py-1 px-1"
                 >
                     "Register"

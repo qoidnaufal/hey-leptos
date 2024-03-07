@@ -3,7 +3,7 @@ use leptos_router::ActionForm;
 
 #[server(UserLogin)]
 async fn login(email: String, password: String) -> Result<(), ServerFnError> {
-    use crate::auth_model::{auth, pool};
+    use crate::state::{auth, pool};
     use crate::user_model::UserData;
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
     use leptos::logging;
