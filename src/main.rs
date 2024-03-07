@@ -21,20 +21,20 @@ use surrealdb::engine::remote::ws::Client as SurrealClient;
 #[cfg(feature = "ssr")]
 use hey_leptos::{
     app,
-    auth_model::AuthSession,
+    auth_model,
     db,
-    fileserv::file_and_error_handler,
+    fileserv,
     // messaging,
     // ws,
     rooms_manager,
     state,
-    user_model::UserData,
+    user_model,
 };
 
 #[cfg(feature = "ssr")]
 async fn server_fn_handler(
     State(app_state): State<state::AppState>,
-    auth_session: AuthSession,
+    auth_session: auth_model::AuthSession,
     request: Request<AxumBody>,
 ) -> impl IntoResponse {
     handle_server_fns_with_context(
@@ -51,7 +51,7 @@ async fn server_fn_handler(
 #[cfg(feature = "ssr")]
 async fn leptos_routes_handler(
     State(app_state): State<state::AppState>,
-    auth_session: AuthSession,
+    auth_session: auth_model::AuthSession,
     req: Request<AxumBody>,
 ) -> Response {
     let handler = leptos_axum::render_route_with_context(
@@ -110,10 +110,10 @@ async fn main() -> std::io::Result<()> {
             get(server_fn_handler).post(server_fn_handler),
         )
         .leptos_routes_with_handler(app_routes, get(leptos_routes_handler))
-        .fallback(file_and_error_handler)
+        .fallback(fileserv::file_and_error_handler)
         .layer(
             AuthSessionLayer::<
-                UserData,
+                user_model::User,
                 String,
                 SessionSurrealPool<SurrealClient>,
                 db::Database,
