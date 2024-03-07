@@ -13,6 +13,7 @@ pub struct UserData {
 pub struct User {
     pub uuid: String,
     pub user_name: String,
+    pub joined_channel: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,9 +24,15 @@ pub enum Availability {
 
 impl User {
     pub fn from_user_data(user_data: &UserData) -> Self {
+        let joined_channel = if user_data.joined_channel.len() == 0 {
+            None
+        } else {
+            Some(user_data.joined_channel.clone())
+        };
         Self {
             uuid: user_data.uuid.clone(),
             user_name: user_data.user_name.clone(),
+            joined_channel,
         }
     }
 }

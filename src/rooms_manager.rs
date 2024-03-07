@@ -159,12 +159,14 @@ pub mod ssr {
             }
         }
 
-        pub fn validate_uuid(&self, room_uuid: String) -> Result<Option<String>, RoomError> {
-            logging::log!("Validating path: {}", room_uuid);
+        pub fn validate_uuid(&self, room_uuid: String) -> Result<(), RoomError> {
+            logging::log!("Validating path: {}\n", room_uuid);
             let rooms = self.rooms.read().unwrap();
 
+            logging::log!("Room: {:?}\n", rooms);
+
             match rooms.get(&room_uuid) {
-                Some(_) => Ok(Some(room_uuid)),
+                Some(_) => Ok(()),
                 None => Err(RoomError::RoomDoesNotExist),
             }
         }

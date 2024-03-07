@@ -50,9 +50,7 @@ async fn create_new_room(payload: CreateRoomPayLoad) -> Result<(), ServerFnError
                 .await
                 .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
 
-            Ok(leptos_axum::redirect(
-                format!("channel/{}", room_uuid).as_str(),
-            ))
+            Ok(leptos_axum::redirect(&room_uuid))
         }
         Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
     }
@@ -64,6 +62,8 @@ async fn join_room(payload: JoinRoomPayload) -> Result<(), ServerFnError> {
         state::{pool, rooms_manager},
         user_model::UserData,
     };
+
+    logging::log!("Received payload is: {:?}", payload);
 
     let pool = pool()?;
     let user = payload.user.clone();
@@ -79,9 +79,7 @@ async fn join_room(payload: JoinRoomPayload) -> Result<(), ServerFnError> {
     let rooms_manager = rooms_manager()?;
 
     match rooms_manager.join_room(payload.room_uuid.clone(), user) {
-        Ok(_) => Ok(leptos_axum::redirect(
-            format!("channel/{}", &payload.room_uuid).as_str(),
-        )),
+        Ok(_) => Ok(leptos_axum::redirect(&payload.room_uuid)),
         Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
     }
 }
@@ -89,9 +87,13 @@ async fn join_room(payload: JoinRoomPayload) -> Result<(), ServerFnError> {
 #[component]
 pub fn PopUpRoomForm(display: ReadSignal<&'static str>) -> impl IntoView {
     let user = create_memo(move |_| expect_context::<CtxProvider>().user);
+    logging::log!("User is: {:?}\n", user.get_untracked());
+
     let create_new_room =
         create_action(|payload: &CreateRoomPayLoad| create_new_room(payload.clone()));
     let join_room = create_action(|payload: &JoinRoomPayload| join_room(payload.clone()));
+
+    // ----
 
     let (show_cr, set_show_cr) = create_signal("hidden");
     let (show_join, set_show_join) = create_signal("hidden");
@@ -114,6 +116,8 @@ pub fn PopUpRoomForm(display: ReadSignal<&'static str>) -> impl IntoView {
         }
     };
 
+    // ----
+
     let cr_node = create_node_ref::<html::Input>();
     let join_node = create_node_ref::<html::Input>();
 
@@ -121,6 +125,7 @@ pub fn PopUpRoomForm(display: ReadSignal<&'static str>) -> impl IntoView {
         ev.prevent_default();
         let room_name = cr_node.get().expect("input element does not exist").value();
         let payload = CreateRoomPayLoad::new(room_name, user.get());
+        logging::log!("create new room payload: {:?}", payload);
         create_new_room.dispatch(payload);
         cr_node
             .get()

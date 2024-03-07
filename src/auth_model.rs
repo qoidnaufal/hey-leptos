@@ -1,20 +1,25 @@
-pub use crate::{db::Database, user_model::UserData};
+pub use crate::{
+    db::Database,
+    user_model::{User, UserData},
+};
 pub use async_trait::async_trait;
 pub use axum_session_auth::{Authentication, SessionSurrealPool};
 pub use leptos::{use_context, ServerFnError};
 pub use surrealdb::engine::remote::ws::Client;
 
 pub type AuthSession =
-    axum_session_auth::AuthSession<UserData, String, SessionSurrealPool<Client>, Database>;
+    axum_session_auth::AuthSession<User, String, SessionSurrealPool<Client>, Database>;
 
 #[async_trait]
-impl Authentication<UserData, String, Database> for UserData {
-    async fn load_user(userid: String, pool: Option<&Database>) -> Result<UserData, anyhow::Error> {
+impl Authentication<User, String, Database> for User {
+    async fn load_user(userid: String, pool: Option<&Database>) -> Result<User, anyhow::Error> {
         let pool = pool.expect("Pool doesn't exist!");
 
-        UserData::get_from_uuid(&userid, &pool)
+        let user_data = UserData::get_from_uuid(&userid, &pool)
             .await
-            .ok_or_else(|| anyhow::anyhow!("Can't get the user!"))
+            .ok_or_else(|| anyhow::anyhow!("User does not exist"))?;
+
+        Ok(User::from_user_data(&user_data))
     }
 
     fn is_authenticated(&self) -> bool {
