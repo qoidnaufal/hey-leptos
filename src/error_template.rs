@@ -6,12 +6,15 @@ use thiserror::Error;
 pub enum AppError {
     #[error("Not Found")]
     NotFound,
+    #[error("Room Does Not Exist")]
+    RoomDoesNotExist,
 }
 
 impl AppError {
     pub fn status_code(&self) -> StatusCode {
         match self {
             AppError::NotFound => StatusCode::NOT_FOUND,
+            AppError::RoomDoesNotExist => StatusCode::NOT_FOUND,
         }
     }
 }

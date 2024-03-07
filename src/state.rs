@@ -1,36 +1,24 @@
-use crate::db::Database;
-use axum::extract::{ws::Message, FromRef};
-use leptos::LeptosOptions;
+use crate::{auth_model::AuthSession, db::Database, rooms_manager::ssr::RoomsManager};
+use axum::extract::FromRef;
+use leptos::{use_context, LeptosOptions, ServerFnError};
 use leptos_router::RouteListing;
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
-use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Clone, FromRef, Debug)]
 pub struct AppState {
     pub pool: Database,
-    pub room: Room,
+    pub rooms_manager: RoomsManager,
     pub leptos_options: LeptosOptions,
     pub routes: Vec<RouteListing>,
 }
 
-// key is email
-pub type Room = Arc<RwLock<HashMap<String, UserConn>>>;
-
-#[derive(Clone, Default, Debug)]
-pub struct UserConn {
-    pub user_name: String,
-    pub uuid: String,
-    pub status: ConStatus,
-    pub sender: Option<UnboundedSender<Message>>,
+pub fn rooms_manager() -> Result<RoomsManager, ServerFnError> {
+    use_context::<RoomsManager>().ok_or_else(|| ServerFnError::new("RoomsManager does not exist"))
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub enum ConStatus {
-    Connected,
-    #[default]
-    Disconnected,
+pub fn pool() -> Result<Database, ServerFnError> {
+    use_context::<Database>().ok_or_else(|| ServerFnError::new("No database is detected!"))
+}
+
+pub fn auth() -> Result<AuthSession, ServerFnError> {
+    use_context::<AuthSession>().ok_or_else(|| ServerFnError::new("No AuthSession is detected!"))
 }
