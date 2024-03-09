@@ -10,6 +10,7 @@ mod chat;
 mod create_or_join;
 mod current_user;
 mod home;
+mod joined_channels;
 mod login;
 mod logout;
 mod register;
@@ -24,6 +25,27 @@ impl CtxProvider {
     pub fn new(user: User) -> Self {
         Self { user }
     }
+}
+
+#[server(FetchUser)]
+pub async fn fetch_user_channels() -> Result<Vec<String>, ServerFnError> {
+    use crate::{
+        state::{auth, pool},
+        user_model::UserData,
+    };
+
+    let auth = auth()?;
+    let pool = pool()?;
+
+    let current_user = auth
+        .current_user
+        .ok_or_else(|| ServerFnError::new("There is no current user!"))?;
+
+    let user_data = UserData::get_from_uuid(&current_user.uuid, &pool)
+        .await
+        .ok_or_else(|| ServerFnError::new("Invalid user: Entry not found in db"))?;
+
+    Ok(user_data.joined_channels)
 }
 
 #[server]

@@ -3,19 +3,19 @@ use leptos::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct CreateRoomPayLoad {
+pub struct CreateRoomPayload {
     room_name: String,
     user: User,
 }
 
-impl CreateRoomPayLoad {
+impl CreateRoomPayload {
     fn new(room_name: String, user: User) -> Self {
         Self { room_name, user }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct JoinRoomPayload {
+pub struct JoinRoomPayload {
     room_uuid: String,
     user: User,
 }
@@ -28,8 +28,8 @@ impl JoinRoomPayload {
 
 // ----
 
-#[server(CreateNewRoom)]
-async fn create_new_room(payload: CreateRoomPayLoad) -> Result<(), ServerFnError> {
+#[server]
+pub async fn create_new_room(payload: CreateRoomPayload) -> Result<(), ServerFnError> {
     use crate::{
         state::{pool, rooms_manager},
         user_model::UserData,
@@ -56,8 +56,8 @@ async fn create_new_room(payload: CreateRoomPayLoad) -> Result<(), ServerFnError
     }
 }
 
-#[server(JoinRoom)]
-async fn join_room(payload: JoinRoomPayload) -> Result<(), ServerFnError> {
+#[server]
+pub async fn join_room(payload: JoinRoomPayload) -> Result<(), ServerFnError> {
     use crate::{
         state::{pool, rooms_manager},
         user_model::UserData,
@@ -85,15 +85,15 @@ async fn join_room(payload: JoinRoomPayload) -> Result<(), ServerFnError> {
 }
 
 #[component]
-pub fn PopUpRoomForm(display: ReadSignal<&'static str>) -> impl IntoView {
+pub fn PopUpRoomForm(
+    display_room_form: ReadSignal<&'static str>,
+    create_room_action: Action<CreateRoomPayload, Result<(), ServerFnError>>,
+    join_room_action: Action<JoinRoomPayload, Result<(), ServerFnError>>,
+) -> impl IntoView {
     let user = create_memo(move |_| expect_context::<CtxProvider>().user);
     logging::log!("User is: {:?}\n", user.get_untracked());
 
-    let create_new_room =
-        create_action(|payload: &CreateRoomPayLoad| create_new_room(payload.clone()));
-    let join_room = create_action(|payload: &JoinRoomPayload| join_room(payload.clone()));
-
-    // ----
+    // ---- managing display class
 
     let (show_cr, set_show_cr) = create_signal("hidden");
     let (show_join, set_show_join) = create_signal("hidden");
@@ -124,9 +124,9 @@ pub fn PopUpRoomForm(display: ReadSignal<&'static str>) -> impl IntoView {
     let cnr = move |ev: ev::SubmitEvent| {
         ev.prevent_default();
         let room_name = cr_node.get().expect("input element does not exist").value();
-        let payload = CreateRoomPayLoad::new(room_name, user.get());
+        let payload = CreateRoomPayload::new(room_name, user.get());
         logging::log!("create new room payload: {:?}", payload);
-        create_new_room.dispatch(payload);
+        create_room_action.dispatch(payload);
         cr_node
             .get()
             .expect("input element does not exist")
@@ -139,7 +139,7 @@ pub fn PopUpRoomForm(display: ReadSignal<&'static str>) -> impl IntoView {
             .expect("input element does not exist")
             .value();
         let payload = JoinRoomPayload::new(room_uuid, user.get());
-        join_room.dispatch(payload);
+        join_room_action.dispatch(payload);
         join_node
             .get()
             .expect("input element does not exist")
@@ -147,59 +147,60 @@ pub fn PopUpRoomForm(display: ReadSignal<&'static str>) -> impl IntoView {
     };
 
     view! {
-        <div class=move || display.get()>
-        <form
-            on:submit=cnr
-            class="flex flex-col px-4">
-            <div class="cursor-pointer bg-indigo-500/[.65] justify-center w-auto h-14 flex flex-col rounded-xl" on:click=show_create_form>
-                <h1 class="cursor-pointer text-white text-center text-xl">"Create New Room"</h1>
-            </div>
-            <div class=move || show_cr.get()>
-                <input
-                    _ref=cr_node
-                    class="text-white pl-1 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto mt-4 text-base h-10"
-                    placeholder="Enter new room name..."
-                    name="room_name"/>
-                <button class="text-white hover:text-black mt-2 w-full bg-sky-500 hover:bg-green-300 rounded-lg border-0 w-fit py-1 px-1">
-                    "create"
-                </button>
-            </div>
-        </form>
-        <form
-            on:submit=jtr
-            class="flex flex-col px-4">
-            <div class="cursor-pointer bg-indigo-500/[.65] mt-4 justify-center w-auto h-14 flex flex-col rounded-xl" on:click=show_join_form>
-                <h1 class="cursor-pointer text-white text-center text-xl">"Join Room"</h1>
-            </div>
-            <div class=move || show_join.get()>
-                <input
-                    _ref=join_node
-                    class="text-white pl-1 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto mt-4 text-base h-10"
-                    placeholder="Enter room id..."
-                    name="room_uuid"/>
-                <button class="text-white hover:text-black mt-2 w-full bg-sky-500 hover:bg-green-300 rounded-lg border-0 w-fit py-1 px-1">
-                    "join"
-                </button>
-            </div>
-        </form>
+        <div class=move || display_room_form.get()>
+            <form
+                on:submit=cnr
+                class="flex flex-col px-4">
+                <div class="cursor-pointer bg-indigo-500/[.65] justify-center w-auto h-14 flex flex-col rounded-xl" on:click=show_create_form>
+                    <h1 class="cursor-pointer text-white text-center text-xl">"Create New Room"</h1>
+                </div>
+                <div class=move || show_cr.get()>
+                    <input
+                        _ref=cr_node
+                        class="text-white pl-1 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto mt-4 text-base h-10"
+                        placeholder="Enter new room name..."
+                        name="room_name"/>
+                    <button class="text-white hover:text-black mt-2 w-full bg-sky-500 hover:bg-green-300 rounded-lg border-0 w-fit py-1 px-1">
+                        "create"
+                    </button>
+                </div>
+            </form>
+            <form
+                on:submit=jtr
+                class="flex flex-col px-4">
+                <div class="cursor-pointer bg-indigo-500/[.65] mt-4 justify-center w-auto h-14 flex flex-col rounded-xl" on:click=show_join_form>
+                    <h1 class="cursor-pointer text-white text-center text-xl">"Join Room"</h1>
+                </div>
+                <div class=move || show_join.get()>
+                    <input
+                        _ref=join_node
+                        class="text-white pl-1 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto mt-4 text-base h-10"
+                        placeholder="Enter room id..."
+                        name="room_uuid"/>
+                    <button class="text-white hover:text-black mt-2 w-full bg-sky-500 hover:bg-green-300 rounded-lg border-0 w-fit py-1 px-1">
+                        "join"
+                    </button>
+                </div>
+            </form>
         </div>
     }
 }
 
 #[component]
 pub fn CreateOrJoinRoomButton(
-    read_sig: ReadSignal<&'static str>,
-    write_sig: WriteSignal<&'static str>,
+    display_room_form: ReadSignal<&'static str>,
+    set_display_room_form: WriteSignal<&'static str>,
 ) -> impl IntoView {
     let (rotate, set_rotate) = create_signal("transition duration-150 border-none pb-1 h-12 w-12 bg-sky-500 hover:bg-green-300 hover:text-black rounded-xl text-white font-sans text-2xl text-center");
+
     let popup = move |_| {
-        if read_sig.get() == "hidden" {
-            write_sig.set(
-                "block absolute top-1/3 left-1/3 flex flex-col bg-slate-800/[.45] w-[300px] h-fit rounded-xl py-4"
+        if display_room_form.get() == "hidden" {
+            set_display_room_form.set(
+                "block absolute left-[500px] top-[300px] flex flex-col bg-slate-800/[.45] w-[300px] h-fit rounded-xl py-4"
             );
             set_rotate.set("transition duration-150 border-none pb-1 rotate-45 h-12 w-12 bg-green-300 text-black rounded-full font-sans text-2xl text-center");
         } else {
-            write_sig.set("hidden");
+            set_display_room_form.set("hidden");
             set_rotate.set("transition duration-150 border-none pb-1 h-12 w-12 bg-sky-500 hover:bg-green-300 hover:text-black rounded-xl text-white font-sans text-2xl text-center");
         }
     };
