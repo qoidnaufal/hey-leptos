@@ -20,7 +20,7 @@ pub fn LogoutButton() -> impl IntoView {
     let logout = create_server_action::<UserLogout>();
     view! {
         <ActionForm action=logout>
-            <button class="font-sans text-white hover:text-black border-none h-12 w-fit bg-transparent">
+            <button class="font-sans text-white hover:text-green-300 hover:bg-slate-600/[.75] border-none h-9 w-full bg-transparent">
                 "Log out"
             </button>
         </ActionForm>

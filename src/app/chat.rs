@@ -1,7 +1,11 @@
 use crate::app::{
-    create_or_join::{CreateOrJoinRoomButton, PopUpRoomForm},
-    current_user::CurrentUser,
-    logout::LogoutButton,
+    create_or_join::{
+        create_new_room, join_room, CreateOrJoinRoomButton, CreateRoomPayload, JoinRoomPayload,
+        PopUpRoomForm,
+    },
+    current_user::{CurrentUser, UserMenu},
+    fetch_user_channels,
+    joined_channels::JoinedChannels,
     CtxProvider,
 };
 use crate::message_model::{Msg, MsgData};
@@ -39,23 +43,17 @@ async fn publish_msg(msg_data: MsgData) -> Result<(), ServerFnError> {
 
 #[component]
 pub fn Channel() -> impl IntoView {
-    let user = expect_context::<CtxProvider>().user;
-
-    let (path, set_path) = create_signal(String::new());
-
-    create_render_effect(move |_| {
-        let mut path_name = window().location().pathname().unwrap();
-        if !path_name.is_empty() {
-            path_name.remove(0);
-        }
-        set_path.set(path_name);
-    });
-
-    let room_uuid = path.get_untracked();
-
-    let message_ref = create_node_ref::<html::Input>();
+    let path = leptos_router::use_location().pathname;
+    let mut room_uuid = path.get_untracked();
+    room_uuid.remove(0);
 
     // ----
+
+    let user = create_memo(move |_| expect_context::<CtxProvider>().user);
+
+    // ----
+
+    let message_ref = create_node_ref::<html::Input>();
 
     let publish_msg = create_action(|msg_data: &MsgData| publish_msg(msg_data.clone()));
 
@@ -70,7 +68,7 @@ pub fn Channel() -> impl IntoView {
             .value();
 
         let msg = Msg::Text(text);
-        let msg_data = MsgData::new(room_uuid, user.clone(), msg);
+        let msg_data = MsgData::new(room_uuid, user.get().clone(), msg);
 
         publish_msg.dispatch(msg_data);
         message_ref
@@ -82,11 +80,6 @@ pub fn Channel() -> impl IntoView {
     view! {
         <div class="h-full bg-transparent grow flex flex-col" id="chat-interface">
             <div class="grow bg-transparent px-4" id="chat-log">
-                // <Suspense fallback=move || view! { <p class="text-white font-sans">"loading..."</p> }>
-                //     {move || {
-                //         subscribe_msg.get().map(|msg| view! { <p>{ msg }</p> })
-                //     }}
-                // </Suspense>
             </div>
             <form on:submit=send class="bg-transparent px-4 h-32 flex flex-row items-center">
                 <input
@@ -105,25 +98,44 @@ pub fn Channel() -> impl IntoView {
 
 #[component]
 pub fn ChatPage() -> impl IntoView {
-    let (display, set_display) = create_signal("hidden");
+    let (display_room_form, set_display_room_form) = create_signal("hidden");
+    let (display_user_menu, set_display_user_menu) = create_signal("hidden");
 
     let user = create_memo(move |_| expect_context::<CtxProvider>().user);
     let user_name = user.get_untracked().user_name;
 
+    // ---- handle channels fetching
+
+    let create_room_action =
+        create_action(move |payload: &CreateRoomPayload| create_new_room(payload.clone()));
+    let join_room_action =
+        create_action(move |payload: &JoinRoomPayload| join_room(payload.clone()));
+
+    let channels_resource = create_resource(
+        move || {
+            (
+                create_room_action.version().get(),
+                join_room_action.version().get(),
+            )
+        },
+        |_| fetch_user_channels(),
+    );
+
     view! {
         <div class="size-11/12 flex flex-row mx-4 my-4 bg-slate-800/[.65] rounded-xl">
-            <PopUpRoomForm display=display/>
-            <div class="flex flex-col items-center h-full w-[70px] bg-slate-950/[.65] rounded-l-xl pb-2" id="main-channel-navigation">
-                <div class="grow bg-transparent py-2">
-                    <CurrentUser name=user_name/>
+            <div id="left-navigation" class="flex flex-col items-center h-full w-[70px] bg-slate-950/[.65] rounded-l-xl pb-2">
+                <div id="channel-list" class="flex flex-col grow bg-transparent">
+                    <JoinedChannels channels_resource/>
                 </div>
-                <CreateOrJoinRoomButton read_sig=display write_sig=set_display/>
+                <CreateOrJoinRoomButton display_room_form set_display_room_form/>
+                <PopUpRoomForm display_room_form create_room_action join_room_action/>
             </div>
-            <div class="h-full w-[300px] bg-transparent rounded-l-xl flex flex-col" id="inner-channel-navigation">
-                <div class="h-20 w-full bg-transparent">
-                    <LogoutButton/>
+            <div id="inner-navigation" class="h-full w-[300px] bg-transparent rounded-l-xl flex flex-col">
+                <div class="h-[50px] w-full bg-transparent">
+                    <CurrentUser user_name display_user_menu set_display_user_menu/>
+                    <UserMenu display_user_menu/>
                 </div>
-                <div class="grow w-full bg-slate-800/[.65] rounded-bl-xl"></div>
+                <div id="sub-channel" class="grow w-full bg-slate-800/[.65] rounded-bl-xl"></div>
             </div>
             <Outlet/>
         </div>

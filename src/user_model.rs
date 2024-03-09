@@ -1,38 +1,31 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserData {
-    pub uuid: String,
-    pub user_name: String,
-    pub email: String,
-    pub password: String,
-    pub joined_channel: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct User {
-    pub uuid: String,
-    pub user_name: String,
-    pub joined_channel: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Availability {
     Available,
     Unavailable,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserData {
+    pub uuid: String,
+    pub user_name: String,
+    pub email: String,
+    pub password: String,
+    pub joined_channels: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct User {
+    pub uuid: String,
+    pub user_name: String,
+}
+
 impl User {
     pub fn from_user_data(user_data: &UserData) -> Self {
-        let joined_channel = if user_data.joined_channel.len() == 0 {
-            None
-        } else {
-            Some(user_data.joined_channel.clone())
-        };
         Self {
             uuid: user_data.uuid.clone(),
             user_name: user_data.user_name.clone(),
-            joined_channel,
         }
     }
 }
@@ -49,7 +42,7 @@ pub mod ssr {
                 user_name,
                 email,
                 password,
-                joined_channel: Vec::<String>::new(),
+                joined_channels: Vec::<String>::new(),
             }
         }
 
@@ -76,7 +69,7 @@ pub mod ssr {
                 .await?;
 
             if let Some(mut user_data) = find_entry {
-                user_data.joined_channel.push(channel);
+                user_data.joined_channels.push(channel);
 
                 pool.client
                     .update::<Option<Self>>(("user_data", self.uuid.clone()))
@@ -99,7 +92,7 @@ pub mod ssr {
 
             if let Some(mut user_data) = find_entry {
                 user_data
-                    .joined_channel
+                    .joined_channels
                     .retain(|room_uuid| *room_uuid != channel);
 
                 pool.client
