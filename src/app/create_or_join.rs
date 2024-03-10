@@ -43,10 +43,10 @@ pub async fn create_new_room(payload: CreateRoomPayload) -> Result<(), ServerFnE
 
     let rooms_manager = rooms_manager()?;
 
-    match rooms_manager.new_room(payload.room_name, user) {
+    match rooms_manager.new_room(payload.room_name.clone(), user) {
         Ok(room_uuid) => {
             user_data
-                .add_channel(room_uuid.clone(), &pool)
+                .add_channel((room_uuid.clone(), payload.room_name), &pool)
                 .await
                 .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
 
@@ -66,19 +66,23 @@ pub async fn join_room(payload: JoinRoomPayload) -> Result<(), ServerFnError> {
     logging::log!("Received payload is: {:?}", payload);
 
     let pool = pool()?;
+    let rooms_manager = rooms_manager()?;
+
     let user = payload.user.clone();
     let user_data = UserData::get_from_uuid(&user.uuid, &pool)
         .await
         .ok_or_else(|| ServerFnError::new("User does not exist"))?;
 
+    let rooms_name = rooms_manager
+        .get_room_name(&payload.room_uuid)
+        .ok_or_else(|| ServerFnError::new("Room does not exist"))?;
+
     user_data
-        .add_channel(payload.room_uuid.clone(), &pool)
+        .add_channel((payload.room_uuid.clone(), rooms_name), &pool)
         .await
         .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
 
-    let rooms_manager = rooms_manager()?;
-
-    match rooms_manager.join_room(payload.room_uuid.clone(), user) {
+    match rooms_manager.join_room(&payload.room_uuid, user) {
         Ok(_) => Ok(leptos_axum::redirect(&payload.room_uuid)),
         Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
     }
@@ -91,7 +95,6 @@ pub fn PopUpRoomForm(
     join_room_action: Action<JoinRoomPayload, Result<(), ServerFnError>>,
 ) -> impl IntoView {
     let user = create_memo(move |_| expect_context::<CtxProvider>().user);
-    logging::log!("User is: {:?}\n", user.get_untracked());
 
     // ---- managing display class
 
@@ -193,7 +196,8 @@ pub fn CreateOrJoinRoomButton(
 ) -> impl IntoView {
     let (rotate, set_rotate) = create_signal("transition duration-150 border-none pb-1 h-12 w-12 bg-sky-500 hover:bg-green-300 hover:text-black rounded-xl text-white font-sans text-2xl text-center");
 
-    let popup = move |_| {
+    let popup = move |ev: ev::MouseEvent| {
+        ev.prevent_default();
         if display_room_form.get() == "hidden" {
             set_display_room_form.set(
                 "block absolute left-[500px] top-[300px] flex flex-col bg-slate-800/[.45] w-[300px] h-fit rounded-xl py-4"

@@ -26,7 +26,8 @@ pub enum RoomError {
 pub struct Room {
     pub room_name: String,
     pub room_uuid: String,
-    pub users: Arc<RwLock<HashMap<String, User>>>, // k: user's uuid
+    // the list of users also need to be a reflection of the database entry
+    pub users: Arc<RwLock<HashMap<String, User>>>,
 }
 
 #[cfg(feature = "ssr")]
@@ -51,7 +52,9 @@ pub mod ssr {
     pub struct RoomsManager {
         pub publisher_client: RedisClient,
         pub subscriber_client: SubscriberClient,
-        pub rooms: Arc<RwLock<HashMap<String, Room>>>, // k: room's uuid
+        // i need to make the "rooms" to be a reflection of the database entry
+        // meaning RwLock won't be usable in the future
+        pub rooms: Arc<RwLock<HashMap<String, Room>>>,
     }
 
     impl Room {
@@ -150,12 +153,21 @@ pub mod ssr {
             Ok(room.room_uuid)
         }
 
-        pub fn join_room(&self, room_uuid: String, user: User) -> Result<(), RoomError> {
+        pub fn join_room(&self, room_uuid: &str, user: User) -> Result<(), RoomError> {
             let rooms = self.rooms.write().unwrap();
 
-            match rooms.get(&room_uuid) {
+            match rooms.get(room_uuid) {
                 Some(room) => room.insert_user(user),
                 None => Err(RoomError::RoomDoesNotExist),
+            }
+        }
+
+        pub fn get_room_name(&self, room_uuid: &str) -> Option<String> {
+            let rooms = self.rooms.read().unwrap();
+
+            match rooms.get(room_uuid) {
+                Some(room) => Some(room.room_name.clone()),
+                None => None,
             }
         }
 
@@ -163,7 +175,7 @@ pub mod ssr {
             logging::log!("Validating path: {}\n", room_uuid);
             let rooms = self.rooms.read().unwrap();
 
-            logging::log!("Room: {:?}\n", rooms);
+            logging::log!("Rooms in rooms_manager: {:?}\n", rooms);
 
             match rooms.get(&room_uuid) {
                 Some(_) => Ok(()),

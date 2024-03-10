@@ -28,7 +28,7 @@ impl CtxProvider {
 }
 
 #[server(FetchUser)]
-pub async fn fetch_user_channels() -> Result<Vec<String>, ServerFnError> {
+pub async fn fetch_user_channels() -> Result<Vec<(String, String)>, ServerFnError> {
     use crate::{
         state::{auth, pool},
         user_model::UserData,
