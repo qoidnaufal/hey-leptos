@@ -44,10 +44,6 @@ async fn publish_msg(msg_data: MsgData) -> Result<(), ServerFnError> {
 #[component]
 pub fn Channel() -> impl IntoView {
     let path = leptos_router::use_location().pathname;
-    let mut room_uuid = path.get_untracked();
-    room_uuid.remove(0);
-
-    // ----
 
     let user = create_memo(move |_| expect_context::<CtxProvider>().user);
 
@@ -60,7 +56,8 @@ pub fn Channel() -> impl IntoView {
     let send = move |ev: ev::SubmitEvent| {
         ev.prevent_default();
 
-        let room_uuid = room_uuid.clone();
+        let mut room_uuid = path.get();
+        room_uuid.remove(0);
 
         let text = message_ref
             .get()
@@ -86,11 +83,9 @@ pub fn Channel() -> impl IntoView {
                     id="input"
                     name="message"
                     _ref=message_ref
-                    class="grow rounded-l-full h-12 text-white font-sans pl-2 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto text-base"
+                    placeholder="Type your message..."
+                    class="grow rounded-md h-12 text-white font-sans pl-2 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto text-base"
                 />
-                <button class="border-none h-12 w-fit px-2 bg-sky-500 hover:bg-green-300 hover:text-black rounded-r-full border-0 text-white font-sans">
-                    "send"
-                </button>
             </form>
         </div>
     }
@@ -102,7 +97,6 @@ pub fn ChatPage() -> impl IntoView {
     let (display_user_menu, set_display_user_menu) = create_signal("hidden");
 
     let user = create_memo(move |_| expect_context::<CtxProvider>().user);
-    let user_name = user.get_untracked().user_name;
 
     // ---- handle channels fetching
 
@@ -111,7 +105,7 @@ pub fn ChatPage() -> impl IntoView {
     let join_room_action =
         create_action(move |payload: &JoinRoomPayload| join_room(payload.clone()));
 
-    let channels_resource = create_resource(
+    let channels_resource = create_local_resource(
         move || {
             (
                 create_room_action.version().get(),
@@ -123,19 +117,23 @@ pub fn ChatPage() -> impl IntoView {
 
     view! {
         <div class="size-11/12 flex flex-row mx-4 my-4 bg-slate-800/[.65] rounded-xl">
-            <div id="left-navigation" class="flex flex-col items-center h-full w-[70px] bg-slate-950/[.65] rounded-l-xl pb-2">
-                <div id="channel-list" class="flex flex-col grow bg-transparent">
-                    <JoinedChannels channels_resource/>
-                </div>
-                <CreateOrJoinRoomButton display_room_form set_display_room_form/>
-                <PopUpRoomForm display_room_form create_room_action join_room_action/>
-            </div>
-            <div id="inner-navigation" class="h-full w-[300px] bg-transparent rounded-l-xl flex flex-col">
-                <div class="h-[50px] w-full bg-transparent">
-                    <CurrentUser user_name display_user_menu set_display_user_menu/>
+            <div id="outer-navigation-container" class="flex flex-col w-[370px] h-full rounded-l-xl bg-transparent">
+                <div id="current-user-container" class="h-[50px] w-full rounded-tl-xl bg-transparent">
+                    <CurrentUser user display_user_menu set_display_user_menu/>
                     <UserMenu display_user_menu/>
                 </div>
-                <div id="sub-channel" class="grow w-full bg-slate-800/[.65] rounded-bl-xl"></div>
+                <div id="inner-navigation" class="flex flex-row bg-transparent rounded-bl-xl w-[370px] h-full">
+                    <div id="channels-navigation" class="flex flex-col items-center h-full w-[70px] bg-slate-950/[.65] rounded-bl-xl pb-2">
+                        <div id="channel-list" class="flex flex-col grow bg-transparent">
+                            <JoinedChannels channels_resource/>
+                        </div>
+                        <CreateOrJoinRoomButton display_room_form set_display_room_form/>
+                        <PopUpRoomForm display_room_form create_room_action join_room_action/>
+                    </div>
+                    <div id="sub-channel-navigation" class="h-full w-[300px] bg-transparent rounded-l-xl flex flex-col">
+                        <div id="sub-channels" class="grow w-full bg-slate-800/[.65] rounded-bl-xl"></div>
+                    </div>
+                </div>
             </div>
             <Outlet/>
         </div>

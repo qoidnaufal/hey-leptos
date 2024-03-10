@@ -1,3 +1,4 @@
+use leptos::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -6,26 +7,47 @@ pub enum Availability {
     Unavailable,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum Avatar {
+    Image { bytes: Vec<u8> },
+    Initial { text: String },
+}
+
+impl Avatar {
+    pub fn get_view(&self) -> impl IntoView {
+        match self {
+            Self::Initial { text: t } => t.clone().into_view(),
+            Self::Image { bytes: b } => b.clone().into_view(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserData {
     pub uuid: String,
     pub user_name: String,
     pub email: String,
     pub password: String,
-    pub joined_channels: Vec<String>,
+    pub joined_channels: Vec<(String, String)>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct User {
     pub uuid: String,
     pub user_name: String,
+    pub avatar: Avatar,
 }
 
 impl User {
     pub fn from_user_data(user_data: &UserData) -> Self {
+        // "dummy" for now
+        let mut initial = user_data.user_name.clone();
+        initial.truncate(1);
+
         Self {
             uuid: user_data.uuid.clone(),
             user_name: user_data.user_name.clone(),
+            avatar: Avatar::Initial { text: initial },
         }
     }
 }
@@ -42,7 +64,7 @@ pub mod ssr {
                 user_name,
                 email,
                 password,
-                joined_channels: Vec::<String>::new(),
+                joined_channels: Vec::<(String, String)>::new(),
             }
         }
 
@@ -60,7 +82,7 @@ pub mod ssr {
 
         pub async fn add_channel(
             &self,
-            channel: String,
+            channel: (String, String),
             pool: &Database,
         ) -> Result<(), surrealdb::Error> {
             let find_entry = pool
@@ -93,7 +115,7 @@ pub mod ssr {
             if let Some(mut user_data) = find_entry {
                 user_data
                     .joined_channels
-                    .retain(|room_uuid| *room_uuid != channel);
+                    .retain(|(room_uuid, _)| *room_uuid != channel);
 
                 pool.client
                     .update::<Option<Self>>(("user_data", self.uuid.clone()))
