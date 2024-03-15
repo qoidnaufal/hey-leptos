@@ -1,8 +1,8 @@
-use leptos::{component, create_server_action, server, view, IntoView, ServerFnError};
+use leptos::*;
 use leptos_router::ActionForm;
 
 #[server(UserLogin)]
-async fn login(email: String, password: String) -> Result<(), ServerFnError> {
+pub async fn login(email: String, password: String) -> Result<(), ServerFnError> {
     use crate::state::{auth, pool};
     use crate::user_model::UserData;
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
@@ -24,7 +24,7 @@ async fn login(email: String, password: String) -> Result<(), ServerFnError> {
     {
         auth.login_user(user.uuid);
         auth.remember_user(true);
-        leptos_axum::redirect("/");
+        leptos_axum::redirect("/channel");
 
         Ok(())
     } else {
@@ -35,7 +35,7 @@ async fn login(email: String, password: String) -> Result<(), ServerFnError> {
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
-    let login = create_server_action::<UserLogin>();
+    let login_action = create_server_action::<UserLogin>();
 
     view! {
         <div
@@ -43,7 +43,7 @@ pub fn LoginPage() -> impl IntoView {
             class="flex-col content-center bg-slate-800/[.65] py-2.5 px-8 rounded-xl size-96"
         >
             <h1 class="mt-5 text-white text-center text-xl">"Login"</h1>
-            <ActionForm action=login class="flex flex-col">
+            <ActionForm action=login_action class="flex flex-col">
                 <input
                     class="text-white pl-1 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto mt-7 text-base h-10"
                     placeholder="Your email..."

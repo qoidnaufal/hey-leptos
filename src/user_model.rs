@@ -13,6 +13,14 @@ pub enum Avatar {
     Initial { text: String },
 }
 
+impl Default for Avatar {
+    fn default() -> Self {
+        Self::Initial {
+            text: "".to_string(),
+        }
+    }
+}
+
 impl Avatar {
     pub fn get_view(&self) -> impl IntoView {
         match self {
@@ -29,42 +37,42 @@ pub struct UserData {
     pub email: String,
     pub password: String,
     pub joined_channels: Vec<(String, String)>,
+    pub avatar: Avatar,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct User {
     pub uuid: String,
     pub user_name: String,
-    pub avatar: Avatar,
 }
 
 impl User {
     pub fn from_user_data(user_data: &UserData) -> Self {
-        // "dummy" for now
-        let mut initial = user_data.user_name.clone();
-        initial.truncate(1);
-
         Self {
             uuid: user_data.uuid.clone(),
             user_name: user_data.user_name.clone(),
-            avatar: Avatar::Initial { text: initial },
         }
     }
 }
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    pub use super::{Availability, UserData};
+    pub use super::{Availability, Avatar, UserData};
     use crate::db::Database;
 
     impl UserData {
         pub fn new(uuid: String, user_name: String, email: String, password: String) -> Self {
+            let mut initial = user_name.clone();
+            initial.truncate(1);
+            let avatar = Avatar::Initial { text: initial };
+
             Self {
                 uuid,
                 user_name,
                 email,
                 password,
                 joined_channels: Vec::<(String, String)>::new(),
+                avatar,
             }
         }
 

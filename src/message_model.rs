@@ -31,12 +31,11 @@ impl MsgData {
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    pub use super::{Msg, MsgData};
-    use crate::db::{Database, IntoDb};
-    use fred::types::RedisValue;
+    pub use super::MsgData;
+    use crate::db::Database;
 
-    impl IntoDb for MsgData {
-        async fn insert_into_db(&self, pool: &Database) -> Result<(), surrealdb::Error> {
+    impl MsgData {
+        pub async fn insert_into_db(&self, pool: &Database) -> Result<(), surrealdb::Error> {
             match pool
                 .client
                 .create::<Option<Self>>(("message", self.msg_uuid.clone()))
@@ -47,13 +46,17 @@ pub mod ssr {
                 Err(err) => Err(err),
             }
         }
-    }
 
-    impl Into<RedisValue> for Msg {
-        fn into(self) -> RedisValue {
-            match self {
-                Self::Text(str) => RedisValue::String(str.into()),
-                Self::Bytes(bytes) => RedisValue::Bytes(bytes.into()),
+        pub async fn get_from_uuid(msg_uuid: &str, pool: &Database) -> Option<Self> {
+            match pool
+                .client
+                .query("SELECT * FROM type::table($table) WHERE msg_uuid = $msg_uuid")
+                .bind(("table", "messages"))
+                .bind(("msg_uuid", msg_uuid))
+                .await
+            {
+                Ok(mut maybe_msg) => maybe_msg.take::<Option<Self>>(0).unwrap_or(None),
+                Err(_) => None,
             }
         }
     }

@@ -48,15 +48,6 @@ pub mod ssr {
     use tokio::task::JoinHandle;
     use uuid::Uuid;
 
-    #[derive(Debug, Clone)]
-    pub struct RoomsManager {
-        pub publisher_client: RedisClient,
-        pub subscriber_client: SubscriberClient,
-        // i need to make the "rooms" to be a reflection of the database entry
-        // meaning RwLock won't be usable in the future
-        pub rooms: Arc<RwLock<HashMap<String, Room>>>,
-    }
-
     impl Room {
         fn new(room_name: String) -> Self {
             let room_uuid = Uuid::new_v4().as_simple().to_string();
@@ -90,6 +81,13 @@ pub mod ssr {
                 Err(RoomError::UserDoesNotExist)
             }
         }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct RoomsManager {
+        pub publisher_client: RedisClient,
+        pub subscriber_client: SubscriberClient,
+        pub rooms: Arc<RwLock<HashMap<String, Room>>>,
     }
 
     impl RoomsManager {
@@ -172,14 +170,18 @@ pub mod ssr {
         }
 
         pub fn validate_uuid(&self, room_uuid: String) -> Result<(), RoomError> {
-            logging::log!("Validating path: {}\n", room_uuid);
+            logging::log!("Validating path: {}", room_uuid);
             let rooms = self.rooms.read().unwrap();
 
-            logging::log!("Rooms in rooms_manager: {:?}\n", rooms);
-
             match rooms.get(&room_uuid) {
-                Some(_) => Ok(()),
-                None => Err(RoomError::RoomDoesNotExist),
+                Some(_) => {
+                    logging::log!("path is valid\n");
+                    Ok(())
+                }
+                None => {
+                    logging::log!("path is invalid\n");
+                    Err(RoomError::RoomDoesNotExist)
+                }
             }
         }
 
