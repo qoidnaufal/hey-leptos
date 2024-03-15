@@ -1,89 +1,70 @@
-use crate::{app::CtxProvider, user_model::User};
 use leptos::*;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateRoomPayload {
-    room_name: String,
-    user: User,
-}
-
-impl CreateRoomPayload {
-    fn new(room_name: String, user: User) -> Self {
-        Self { room_name, user }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JoinRoomPayload {
-    room_uuid: String,
-    user: User,
-}
-
-impl JoinRoomPayload {
-    fn new(room_uuid: String, user: User) -> Self {
-        Self { room_uuid, user }
-    }
-}
-
-// ----
-
-#[server]
-pub async fn create_new_room(payload: CreateRoomPayload) -> Result<(), ServerFnError> {
+#[server(CreateNewRoom)]
+pub async fn create_new_room(room_name: String) -> Result<(), ServerFnError> {
     use crate::{
-        state::{pool, rooms_manager},
+        state::{auth, pool, rooms_manager},
         user_model::UserData,
     };
 
+    let auth = auth()?;
     let pool = pool()?;
-    let user = payload.user.clone();
+
+    let user = auth
+        .current_user
+        .ok_or_else(|| ServerFnError::new("Auth does not contain user"))?;
     let user_data = UserData::get_from_uuid(&user.uuid, &pool)
         .await
         .ok_or_else(|| ServerFnError::new("User does not exist"))?;
 
     let rooms_manager = rooms_manager()?;
 
-    match rooms_manager.new_room(payload.room_name.clone(), user) {
+    match rooms_manager.new_room(room_name.clone(), user) {
         Ok(room_uuid) => {
             user_data
-                .add_channel((room_uuid.clone(), payload.room_name), &pool)
+                .add_channel((room_uuid.clone(), room_name), &pool)
                 .await
                 .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
 
-            Ok(leptos_axum::redirect(&room_uuid))
+            let redirect_path = format!("/channel/{}", room_uuid);
+
+            Ok(leptos_axum::redirect(redirect_path.as_str()))
         }
         Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
     }
 }
 
-#[server]
-pub async fn join_room(payload: JoinRoomPayload) -> Result<(), ServerFnError> {
+#[server(JoinRoom)]
+pub async fn join_room(room_uuid: String) -> Result<(), ServerFnError> {
     use crate::{
-        state::{pool, rooms_manager},
+        state::{auth, pool, rooms_manager},
         user_model::UserData,
     };
 
-    logging::log!("Received payload is: {:?}", payload);
-
+    let auth = auth()?;
     let pool = pool()?;
     let rooms_manager = rooms_manager()?;
 
-    let user = payload.user.clone();
+    let user = auth
+        .current_user
+        .ok_or_else(|| ServerFnError::new("Auth does not contain user"))?;
     let user_data = UserData::get_from_uuid(&user.uuid, &pool)
         .await
         .ok_or_else(|| ServerFnError::new("User does not exist"))?;
 
     let rooms_name = rooms_manager
-        .get_room_name(&payload.room_uuid)
+        .get_room_name(&room_uuid)
         .ok_or_else(|| ServerFnError::new("Room does not exist"))?;
 
     user_data
-        .add_channel((payload.room_uuid.clone(), rooms_name), &pool)
+        .add_channel((room_uuid.clone(), rooms_name), &pool)
         .await
         .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
 
-    match rooms_manager.join_room(&payload.room_uuid, user) {
-        Ok(_) => Ok(leptos_axum::redirect(&payload.room_uuid)),
+    let redirect_path = format!("/channel/{}", room_uuid.clone());
+
+    match rooms_manager.join_room(&room_uuid, user) {
+        Ok(_) => Ok(leptos_axum::redirect(redirect_path.as_str())),
         Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
     }
 }
@@ -91,13 +72,9 @@ pub async fn join_room(payload: JoinRoomPayload) -> Result<(), ServerFnError> {
 #[component]
 pub fn PopUpRoomForm(
     display_room_form: ReadSignal<&'static str>,
-    create_room_action: Action<CreateRoomPayload, Result<(), ServerFnError>>,
-    join_room_action: Action<JoinRoomPayload, Result<(), ServerFnError>>,
+    create_room_action: Action<CreateNewRoom, Result<(), ServerFnError>>,
+    join_room_action: Action<JoinRoom, Result<(), ServerFnError>>,
 ) -> impl IntoView {
-    let user = create_memo(move |_| expect_context::<CtxProvider>().user);
-
-    // ---- managing display class
-
     let (show_cr, set_show_cr) = create_signal("hidden");
     let (show_join, set_show_join) = create_signal("hidden");
 
@@ -127,9 +104,7 @@ pub fn PopUpRoomForm(
     let cnr = move |ev: ev::SubmitEvent| {
         ev.prevent_default();
         let room_name = cr_node.get().expect("input element does not exist").value();
-        let payload = CreateRoomPayload::new(room_name, user.get());
-        logging::log!("create new room payload: {:?}", payload);
-        create_room_action.dispatch(payload);
+        create_room_action.dispatch(CreateNewRoom { room_name });
         cr_node
             .get()
             .expect("input element does not exist")
@@ -141,8 +116,7 @@ pub fn PopUpRoomForm(
             .get()
             .expect("input element does not exist")
             .value();
-        let payload = JoinRoomPayload::new(room_uuid, user.get());
-        join_room_action.dispatch(payload);
+        join_room_action.dispatch(JoinRoom { room_uuid });
         join_node
             .get()
             .expect("input element does not exist")

@@ -16,39 +16,7 @@ mod logout;
 mod register;
 mod users_list;
 
-#[derive(Clone)]
-pub struct CtxProvider {
-    pub user: User,
-}
-
-impl CtxProvider {
-    pub fn new(user: User) -> Self {
-        Self { user }
-    }
-}
-
-#[server(FetchUser)]
-pub async fn fetch_user_channels() -> Result<Vec<(String, String)>, ServerFnError> {
-    use crate::{
-        state::{auth, pool},
-        user_model::UserData,
-    };
-
-    let auth = auth()?;
-    let pool = pool()?;
-
-    let current_user = auth
-        .current_user
-        .ok_or_else(|| ServerFnError::new("There is no current user!"))?;
-
-    let user_data = UserData::get_from_uuid(&current_user.uuid, &pool)
-        .await
-        .ok_or_else(|| ServerFnError::new("Invalid user: Entry not found in db"))?;
-
-    Ok(user_data.joined_channels)
-}
-
-#[server]
+#[server(AuthenticateUser)]
 async fn authenticate_user() -> Result<User, ServerFnError> {
     use crate::{
         state::{auth, pool},
@@ -77,62 +45,6 @@ async fn authenticate_user() -> Result<User, ServerFnError> {
     }
 }
 
-#[server]
-async fn validate_path(path: String) -> Result<(), ServerFnError> {
-    use crate::state::rooms_manager;
-
-    let rooms_manager = rooms_manager()?;
-
-    let uuid = path
-        .strip_prefix("/")
-        .expect("Valid uuid is needed")
-        .to_string();
-
-    rooms_manager
-        .validate_uuid(uuid)
-        .map_err(|err| ServerFnError::new(format!("{:?}", err)))
-}
-
-#[component]
-fn HomeOrChat() -> impl IntoView {
-    view! {
-        <Await
-            future=authenticate_user
-            children=|auth| {
-                if let Ok(user) = auth.clone() {
-                    provide_context(CtxProvider::new(user));
-
-                    view! { <chat::ChatPage/> }
-                } else {
-                    view! { <home::HomePage/> }
-                }
-            }
-        />
-    }
-}
-
-#[component]
-fn ViewChannel() -> impl IntoView {
-    let location = use_location().pathname;
-
-    let mut outside_errors = Errors::default();
-    outside_errors.insert_with_default_key(AppError::NotFound);
-
-    view! {
-        <Await
-            future=move || validate_path(location.get())
-            children=move |result| {
-                let outside_errors = outside_errors.clone();
-                if result.is_ok() {
-                    view! { <chat::Channel/> }
-                } else {
-                    view! { <ErrorTemplate outside_errors/> }
-                }
-            }
-        />
-    }
-}
-
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
@@ -147,8 +59,9 @@ pub fn App() -> impl IntoView {
         }>
             <main class="grid h-screen place-items-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
                 <Routes>
-                    <Route path="/" view=HomeOrChat>
-                        <Route path=":id" view=ViewChannel/>
+                    <Route path="/" view=home::HomePage/>
+                    <Route path="/channel" view=chat::ChatPage>
+                        <Route path=":id" view=chat::Channel/>
                         <Route path="" view=|| view! {
                             <div class="h-full bg-transparent grow flex items-center justify-center">
                                 <p class="font-sans text-white text-center">"TODO: create a landing page"</p>
