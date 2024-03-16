@@ -1,11 +1,11 @@
-use crate::{app::logout::LogoutButton, user_model::Avatar};
+use super::logout::LogoutButton;
+use crate::models::user_model::Avatar;
 use leptos::*;
 
 #[server(GetAvatarAndName, "/api", "GetJson")]
 async fn get_avatar_and_name() -> Result<(Avatar, String), ServerFnError> {
+    use crate::models::user_model::UserData;
     use crate::state::{auth, pool};
-    use crate::user_model::UserData;
-    // use std::{thread, time::Duration};
 
     let auth = auth()?;
     let pool = pool()?;
@@ -18,7 +18,7 @@ async fn get_avatar_and_name() -> Result<(Avatar, String), ServerFnError> {
         .await
         .ok_or_else(|| ServerFnError::new("User does not exist"))?;
 
-    // thread::sleep(Duration::from_millis(1500));
+    // std::thread::sleep(std::time::Duration::from_millis(1500));
 
     Ok((user_data.avatar.clone(), user_data.user_name))
 }

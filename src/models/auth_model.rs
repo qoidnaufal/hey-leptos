@@ -1,6 +1,6 @@
 pub use crate::{
     db::Database,
-    user_model::{User, UserData},
+    models::user_model::{User, UserData},
 };
 pub use async_trait::async_trait;
 pub use axum_session_auth::{Authentication, SessionSurrealPool};

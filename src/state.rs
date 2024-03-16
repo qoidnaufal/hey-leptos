@@ -1,4 +1,4 @@
-use crate::{auth_model::AuthSession, db::Database, rooms_manager::ssr::RoomsManager};
+use crate::{db::Database, models::auth_model::AuthSession, rooms_manager::ssr::RoomsManager};
 use axum::extract::FromRef;
 use leptos::{use_context, LeptosOptions, ServerFnError};
 use leptos_router::RouteListing;

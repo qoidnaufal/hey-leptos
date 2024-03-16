@@ -3,6 +3,7 @@ use leptos_router::ActionForm;
 
 #[server(UserLogout)]
 pub async fn logout() -> Result<(), ServerFnError> {
+    use super::MyPath;
     use crate::state::auth;
 
     let auth = auth()?;
@@ -10,7 +11,7 @@ pub async fn logout() -> Result<(), ServerFnError> {
 
     auth.logout_user();
     auth.cache_clear_user(uuid);
-    leptos_axum::redirect("/login");
+    leptos_axum::redirect(&MyPath::Login.to_string());
 
     Ok(())
 }

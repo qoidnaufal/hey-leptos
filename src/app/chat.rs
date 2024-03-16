@@ -1,12 +1,10 @@
-use crate::{
-    app::{
-        create_or_join::{CreateNewRoom, CreateOrJoinRoomButton, JoinRoom, PopUpRoomForm},
-        current_user::{CurrentUser, UserMenu},
-        joined_channels::{fetch_joined_channels, UserChannels},
-        ErrorTemplate,
-    },
-    error_template::AppError,
+use super::{
+    create_or_join::{CreateNewRoom, CreateOrJoinRoomButton, JoinRoom, PopUpRoomForm},
+    current_user::{CurrentUser, UserMenu},
+    joined_channels::{fetch_joined_channels, UserChannels},
+    ErrorTemplate,
 };
+use crate::error_template::AppError;
 use leptos::*;
 use leptos_router::Outlet;
 
@@ -28,7 +26,7 @@ async fn validate_path(path: String) -> Result<(), ServerFnError> {
 
 #[server(PublishMsg)]
 async fn publish_msg(text: String, room_uuid: String) -> Result<(), ServerFnError> {
-    use crate::message_model::{Msg, MsgData};
+    use crate::models::message_model::{Msg, MsgData};
     use crate::rooms_manager::SelectClient;
     use crate::state::{auth, pool, rooms_manager};
 
@@ -67,18 +65,14 @@ async fn publish_msg(text: String, room_uuid: String) -> Result<(), ServerFnErro
 pub fn Channel() -> impl IntoView {
     let path = leptos_router::use_location().pathname;
 
-    create_effect(move |_| {
-        logging::log!("viewing channel: {}", path.get());
-    });
-
-    let resource = create_resource(move || path.get(), |path| validate_path(path));
+    let path_resource = create_resource(move || path.get(), |path| validate_path(path));
 
     view! {
         <Transition fallback=move || {
             view! { <p>"Loading..."</p> }
         }>
             {move || {
-                match resource.get().unwrap_or(Ok(())) {
+                match path_resource.get().unwrap_or(Ok(())) {
                     Ok(_) => {
                         let message_ref = create_node_ref::<html::Input>();
                         let publish_msg = create_server_action::<PublishMsg>();

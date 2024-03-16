@@ -7,6 +7,8 @@ pub enum Availability {
     Unavailable,
 }
 
+// ---- avatar
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Avatar {
     Image { bytes: Vec<u8> },
@@ -30,6 +32,8 @@ impl Avatar {
     }
 }
 
+// ---- user data as main data to store in db
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserData {
     pub uuid: String,
@@ -39,6 +43,8 @@ pub struct UserData {
     pub joined_channels: Vec<(String, String)>,
     pub avatar: Avatar,
 }
+
+// ---- user to expose to the client
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct User {
