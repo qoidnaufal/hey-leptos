@@ -1,11 +1,12 @@
+use super::MyPath;
 use leptos::*;
 use leptos_router::A;
 
 #[server(FetchJoinedChannels, "/api", "GetJson")]
 pub async fn fetch_joined_channels() -> Result<Vec<(String, String)>, ServerFnError> {
     use crate::{
+        models::user_model::UserData,
         state::{auth, pool},
-        user_model::UserData,
     };
 
     let auth = auth()?;
@@ -50,10 +51,9 @@ pub fn UserChannels(
                 });
 
                 let room_uuid = channel.get().0;
-                let path = format!("/channel/{}", room_uuid);
 
                 view! {
-                    <A href=path>
+                    <A href=MyPath::Channel(Some(room_uuid))>
                         <div
                             class="flex cursor-pointer text-center items-center text-xl text-ellipsis overflow-hidden uppercase w-12 h-12 rounded-xl bg-sky-500 hover:bg-green-300 active:bg-green-300 mt-2 px-2">
                             { move || channel.get().1 }

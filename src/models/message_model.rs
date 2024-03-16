@@ -1,4 +1,4 @@
-use crate::user_model::User;
+use super::user_model::User;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

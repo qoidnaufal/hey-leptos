@@ -1,12 +1,13 @@
+use super::MyPath;
 use leptos::*;
-use leptos_router::ActionForm;
+use leptos_router::{ActionForm, A};
 
 #[server(UserLogin)]
 pub async fn login(email: String, password: String) -> Result<(), ServerFnError> {
+    use super::MyPath;
+    use crate::models::user_model::UserData;
     use crate::state::{auth, pool};
-    use crate::user_model::UserData;
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
-    use leptos::logging;
 
     let pool = pool()?;
     let auth = auth()?;
@@ -24,11 +25,10 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
     {
         auth.login_user(user.uuid);
         auth.remember_user(true);
-        leptos_axum::redirect("/channel");
+        leptos_axum::redirect(&MyPath::Channel(None).to_string());
 
         Ok(())
     } else {
-        logging::log!("User auth failed: Mismatched email & password.");
         Err(ServerFnError::new("Password does not match".to_string()))
     }
 }
@@ -63,10 +63,10 @@ pub fn LoginPage() -> impl IntoView {
                 </button>
             </ActionForm>
             <p class="text-white text-center mt-2" id="switch">
-                "Don't have an account?"
-                <a class="text-indigo-400" href="/register">
+                "Want to create a new account?"
+                <A class="text-indigo-400" href=MyPath::Register>
                     " Register "
-                </a>
+                </A>
                 "now!"
             </p>
         </div>

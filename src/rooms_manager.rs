@@ -1,4 +1,4 @@
-use crate::user_model::User;
+use crate::models::user_model::User;
 
 use std::{
     collections::HashMap,
@@ -26,14 +26,13 @@ pub enum RoomError {
 pub struct Room {
     pub room_name: String,
     pub room_uuid: String,
-    // the list of users also need to be a reflection of the database entry
     pub users: Arc<RwLock<HashMap<String, User>>>,
 }
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
     pub use super::{Room, RoomError, SelectClient};
-    use crate::{message_model::Msg, user_model::User};
+    use crate::models::{message_model::Msg, user_model::User};
     use fred::{
         clients::{RedisClient, SubscriberClient},
         error::RedisError,

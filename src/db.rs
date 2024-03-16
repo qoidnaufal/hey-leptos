@@ -7,9 +7,9 @@ use surrealdb::{
 #[derive(Clone, Debug)]
 pub struct Database {
     pub client: Surreal<Client>,
-    #[allow(unused)]
+    #[allow(dead_code)]
     name_space: &'static str,
-    #[allow(unused)]
+    #[allow(dead_code)]
     db_name: &'static str,
 }
 

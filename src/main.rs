@@ -20,15 +20,9 @@ use surrealdb::engine::remote::ws::Client as SurrealClient;
 
 #[cfg(feature = "ssr")]
 use hey_leptos::{
-    app,
-    auth_model,
-    db,
-    fileserv,
-    // messaging,
-    // ws,
-    rooms_manager,
-    state,
-    user_model,
+    app, db, fileserv,
+    models::{auth_model, user_model},
+    rooms_manager, state,
 };
 
 #[cfg(feature = "ssr")]
