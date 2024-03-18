@@ -1,12 +1,14 @@
-use super::MyPath;
+use super::AppPath;
 use leptos::*;
 use leptos_router::{ActionForm, A};
 
+type LoginAction = Action<UserLogin, Result<(), ServerFnError>>;
+
 #[server(UserLogin)]
 pub async fn login(email: String, password: String) -> Result<(), ServerFnError> {
-    use super::MyPath;
+    use super::AppPath;
     use crate::models::user_model::UserData;
-    use crate::state::{auth, pool};
+    use crate::state::ssr::{auth, pool};
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
     let pool = pool()?;
@@ -25,7 +27,7 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
     {
         auth.login_user(user.uuid);
         auth.remember_user(true);
-        leptos_axum::redirect(&MyPath::Channel(None).to_string());
+        leptos_axum::redirect(&AppPath::Channel(None).to_string());
 
         Ok(())
     } else {
@@ -34,8 +36,8 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
 }
 
 #[component]
-pub fn LoginPage() -> impl IntoView {
-    let login_action = create_server_action::<UserLogin>();
+pub fn LoginPage(login_action: LoginAction) -> impl IntoView {
+    // let login_action = create_server_action::<UserLogin>();
 
     view! {
         <div
@@ -64,7 +66,7 @@ pub fn LoginPage() -> impl IntoView {
             </ActionForm>
             <p class="text-white text-center mt-2" id="switch">
                 "Want to create a new account?"
-                <A class="text-indigo-400" href=MyPath::Register>
+                <A class="text-indigo-400" href=AppPath::Register>
                     " Register "
                 </A>
                 "now!"

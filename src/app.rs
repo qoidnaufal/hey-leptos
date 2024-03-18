@@ -1,7 +1,4 @@
-use crate::{
-    error_template::{AppError, ErrorTemplate},
-    models::user_model::User,
-};
+use crate::error_template::{AppError, ErrorTemplate};
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
@@ -16,7 +13,7 @@ mod logout;
 mod register;
 mod users_list;
 
-pub enum MyPath {
+pub enum AppPath {
     Register,
     Login,
     Logout,
@@ -24,22 +21,22 @@ pub enum MyPath {
     Channel(Option<String>),
 }
 
-impl std::fmt::Display for MyPath {
+impl std::fmt::Display for AppPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Register => write!(f, "/register"),
-            Self::Login => write!(f, "/login"),
-            Self::Logout => write!(f, "/logout"),
-            Self::Home => write!(f, "/"),
+            Self::Register => write!(f, "register"),
+            Self::Login => write!(f, "login"),
+            Self::Logout => write!(f, "logout"),
+            Self::Home => write!(f, ""),
             Self::Channel(id) => match id {
-                Some(id) => write!(f, "/channel/{}", id),
-                None => write!(f, "/channel"),
+                Some(id) => write!(f, "channel/{}", id),
+                None => write!(f, "channel"),
             },
         }
     }
 }
 
-impl leptos_router::ToHref for MyPath {
+impl leptos_router::ToHref for AppPath {
     fn to_href(&self) -> Box<dyn Fn() -> String + '_> {
         match self {
             Self::Register => Box::new(|| Self::Register.to_string()),
@@ -52,10 +49,10 @@ impl leptos_router::ToHref for MyPath {
 }
 
 #[server(AuthenticateUser)]
-async fn authenticate_user() -> Result<User, ServerFnError> {
+async fn authenticate_user() -> Result<(), ServerFnError> {
     use crate::{
         models::user_model::UserData,
-        state::{auth, pool},
+        state::ssr::{auth, pool},
     };
 
     let auth = auth()?;
@@ -64,17 +61,13 @@ async fn authenticate_user() -> Result<User, ServerFnError> {
     if auth.is_authenticated() {
         let user = auth
             .current_user
-            .clone()
             .ok_or_else(|| ServerFnError::new("There is no current user!"))?;
 
         if UserData::get_from_uuid(&user.uuid, &pool).await.is_none() {
             return Err(ServerFnError::new("Invalid user"));
         }
 
-        auth.login_user(user.uuid.clone());
-        auth.remember_user(true);
-
-        Ok(user)
+        Ok(())
     } else {
         Err(ServerFnError::new("Auth session isn't authenticated!"))
     }
@@ -84,7 +77,13 @@ async fn authenticate_user() -> Result<User, ServerFnError> {
 pub fn App() -> impl IntoView {
     provide_meta_context();
 
-    let resource = create_resource(|| (), |_| authenticate_user());
+    let login_action = create_server_action::<login::UserLogin>();
+    let logout_action = create_server_action::<logout::UserLogout>();
+
+    let auth_resource = create_resource(
+        move || (login_action.version().get(), logout_action.version().get()),
+        |_| authenticate_user(),
+    );
 
     view! {
         <Stylesheet id="leptos" href="/pkg/hey-leptos.css"/>
@@ -97,17 +96,21 @@ pub fn App() -> impl IntoView {
             <main class="grid h-screen place-items-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
                 <Routes>
                     <Route
-                        path=MyPath::Home
+                        path=AppPath::Home
                         view=move || view! {
                             <Transition fallback=|| view! { <p>"Loading..."</p> }>
-                                {move || resource.map(|res| match res.clone() {
-                                    Ok(_) => view! { <Redirect path=MyPath::Channel(None)/> },
+                                {move || auth_resource.map(|res| match res.clone() {
+                                    Ok(_) => view! { <Redirect path=AppPath::Channel(None)/> },
                                     Err(_) => view! { <home::HomePage/> }
                                 })}
                             </Transition>
                         }
                     />
-                    <Route path=MyPath::Channel(None) view=chat::ChatPage>
+                    // TODO: create a guarding mechanism here
+                    <Route
+                        path=AppPath::Channel(None)
+                        view=move || view! { <chat::ChatPage logout_action/> }
+                    >
                         <Route path=":id" view=chat::Channel/>
                         <Route path="" view=|| view! {
                             <div class="h-full bg-transparent grow flex items-center justify-center">
@@ -115,8 +118,8 @@ pub fn App() -> impl IntoView {
                             </div>
                         }/>
                     </Route>
-                    <Route path=MyPath::Register view=register::RegisterPage/>
-                    <Route path=MyPath::Login view=login::LoginPage/>
+                    <Route path=AppPath::Register view=register::RegisterPage/>
+                    <Route path=AppPath::Login view=move || view! { <login::LoginPage login_action/> }/>
                 </Routes>
             </main>
         </Router>

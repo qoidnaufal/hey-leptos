@@ -1,12 +1,13 @@
-use super::MyPath;
 use leptos::*;
 use leptos_router::A;
+
+type ChannelsResource = Resource<(usize, usize), Result<Vec<(String, String)>, ServerFnError>>;
 
 #[server(FetchJoinedChannels, "/api", "GetJson")]
 pub async fn fetch_joined_channels() -> Result<Vec<(String, String)>, ServerFnError> {
     use crate::{
         models::user_model::UserData,
-        state::{auth, pool},
+        state::ssr::{auth, pool},
     };
 
     let auth = auth()?;
@@ -24,9 +25,7 @@ pub async fn fetch_joined_channels() -> Result<Vec<(String, String)>, ServerFnEr
 }
 
 #[component]
-pub fn UserChannels(
-    channels_resource: Resource<(usize, usize), Result<Vec<(String, String)>, ServerFnError>>,
-) -> impl IntoView {
+pub fn UserChannels(channels_resource: ChannelsResource) -> impl IntoView {
     view! {
         <For
         {move || channels_resource.track()}
@@ -51,13 +50,20 @@ pub fn UserChannels(
                 });
 
                 let room_uuid = channel.get().0;
+                let path = leptos_router::use_location().pathname;
+
+                let active = move |room_id| {move ||
+                    if path.get().contains(&room_id) {
+                        "text-xl text-ellipsis overflow-hidden uppercase w-12 h-12 rounded-xl bg-green-300 font-bold border-4 border-sky-500 border-solid mt-2 px-2"
+                    } else {
+                        "text-xl text-white text-ellipsis overflow-hidden uppercase w-12 h-12 rounded-xl bg-sky-500 hover:bg-green-300 border-none mt-2 px-2"
+                    }};
 
                 view! {
-                    <A href=MyPath::Channel(Some(room_uuid))>
-                        <div
-                            class="flex cursor-pointer text-center items-center text-xl text-ellipsis overflow-hidden uppercase w-12 h-12 rounded-xl bg-sky-500 hover:bg-green-300 active:bg-green-300 mt-2 px-2">
+                    <A href=channel.get().0>
+                        <button class={active(room_uuid)}>
                             { move || channel.get().1 }
-                        </div>
+                        </button>
                     </A>
                 }
             }

@@ -1,13 +1,13 @@
-use super::MyPath;
+use super::AppPath;
 use leptos::*;
 use leptos_router::{ActionForm, FromFormData, A};
 
 #[server(RegisterUser)]
 async fn register(user_name: String, email: String, password: String) -> Result<(), ServerFnError> {
-    use super::MyPath;
+    use super::AppPath;
     use crate::{
         models::user_model::{Availability, UserData},
-        state::pool,
+        state::ssr::pool,
     };
     use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
     use rand_core::OsRng;
@@ -28,7 +28,7 @@ async fn register(user_name: String, email: String, password: String) -> Result<
 
             match new_user.insert_into_db(&pool).await {
                 Ok(_) => {
-                    leptos_axum::redirect(&MyPath::Login.to_string());
+                    leptos_axum::redirect(&AppPath::Login.to_string());
                     Ok(())
                 }
                 Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
@@ -84,7 +84,7 @@ pub fn RegisterPage() -> impl IntoView {
             </ActionForm>
             <p class="text-white text-center mt-2" id="switch">
                 "Already have an account?"
-                <A class="text-indigo-400" href=MyPath::Login>
+                <A class="text-indigo-400" href=AppPath::Login>
                     " Login "
                 </A>
                 "now!"
