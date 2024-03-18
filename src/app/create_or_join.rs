@@ -2,10 +2,10 @@ use leptos::*;
 
 #[server(CreateNewRoom)]
 pub async fn create_new_room(room_name: String) -> Result<(), ServerFnError> {
-    use super::MyPath;
+    use super::AppPath;
     use crate::{
         models::user_model::UserData,
-        state::{auth, pool, rooms_manager},
+        state::ssr::{auth, pool, rooms_manager},
     };
 
     let auth = auth()?;
@@ -28,7 +28,7 @@ pub async fn create_new_room(room_name: String) -> Result<(), ServerFnError> {
                 .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
 
             Ok(leptos_axum::redirect(
-                &MyPath::Channel(Some(room_uuid)).to_string(),
+                &AppPath::Channel(Some(room_uuid)).to_string(),
             ))
         }
         Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
@@ -37,10 +37,10 @@ pub async fn create_new_room(room_name: String) -> Result<(), ServerFnError> {
 
 #[server(JoinRoom)]
 pub async fn join_room(room_uuid: String) -> Result<(), ServerFnError> {
-    use super::MyPath;
+    use super::AppPath;
     use crate::{
         models::user_model::UserData,
-        state::{auth, pool, rooms_manager},
+        state::ssr::{auth, pool, rooms_manager},
     };
 
     let auth = auth()?;
@@ -65,7 +65,7 @@ pub async fn join_room(room_uuid: String) -> Result<(), ServerFnError> {
 
     match rooms_manager.join_room(&room_uuid, user) {
         Ok(_) => Ok(leptos_axum::redirect(
-            &MyPath::Channel(Some(room_uuid)).to_string(),
+            &AppPath::Channel(Some(room_uuid)).to_string(),
         )),
         Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
     }

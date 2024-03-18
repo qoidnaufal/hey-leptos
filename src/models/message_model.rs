@@ -32,7 +32,7 @@ impl MsgData {
 #[cfg(feature = "ssr")]
 pub mod ssr {
     pub use super::MsgData;
-    use crate::db::Database;
+    use crate::state::db::ssr::Database;
 
     impl MsgData {
         pub async fn insert_into_db(&self, pool: &Database) -> Result<(), surrealdb::Error> {

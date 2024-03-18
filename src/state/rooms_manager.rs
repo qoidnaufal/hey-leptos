@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-pub enum SelectClient {
+pub enum PubSubClient {
     All,
     Publisher,
     Subscriber,
@@ -31,7 +31,7 @@ pub struct Room {
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    pub use super::{Room, RoomError, SelectClient};
+    use super::{PubSubClient, Room, RoomError};
     use crate::models::{message_model::Msg, user_model::User};
     use fred::{
         clients::{RedisClient, SubscriberClient},
@@ -105,15 +105,15 @@ pub mod ssr {
             }
         }
 
-        pub async fn init(&self, which: SelectClient) -> Result<(), RedisError> {
+        pub async fn init(&self, which: PubSubClient) -> Result<(), RedisError> {
             match which {
-                SelectClient::Publisher => {
+                PubSubClient::Publisher => {
                     self.publisher_client.init().await?;
                 }
-                SelectClient::Subscriber => {
+                PubSubClient::Subscriber => {
                     self.subscriber_client.init().await?;
                 }
-                SelectClient::All => {
+                PubSubClient::All => {
                     self.publisher_client.init().await?;
                     self.subscriber_client.init().await?;
                 }
@@ -122,15 +122,15 @@ pub mod ssr {
             Ok(())
         }
 
-        pub async fn quit(&self, which: SelectClient) -> Result<(), RedisError> {
+        pub async fn quit(&self, which: PubSubClient) -> Result<(), RedisError> {
             match which {
-                SelectClient::Publisher => {
+                PubSubClient::Publisher => {
                     self.publisher_client.quit().await?;
                 }
-                SelectClient::Subscriber => {
+                PubSubClient::Subscriber => {
                     self.subscriber_client.quit().await?;
                 }
-                SelectClient::All => {
+                PubSubClient::All => {
                     self.publisher_client.quit().await?;
                     self.subscriber_client.quit().await?;
                 }
@@ -169,18 +169,11 @@ pub mod ssr {
         }
 
         pub fn validate_uuid(&self, room_uuid: String) -> Result<(), RoomError> {
-            logging::log!("Validating path: {}", room_uuid);
             let rooms = self.rooms.read().unwrap();
 
             match rooms.get(&room_uuid) {
-                Some(_) => {
-                    logging::log!("path is valid\n");
-                    Ok(())
-                }
-                None => {
-                    logging::log!("path is invalid\n");
-                    Err(RoomError::RoomDoesNotExist)
-                }
+                Some(_) => Ok(()),
+                None => Err(RoomError::RoomDoesNotExist),
             }
         }
 

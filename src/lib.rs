@@ -1,14 +1,10 @@
 #[cfg(feature = "ssr")]
-pub mod db;
-#[cfg(feature = "ssr")]
 pub mod fileserv;
-#[cfg(feature = "ssr")]
-pub mod state;
 
 pub mod app;
 pub mod error_template;
 pub mod models;
-pub mod rooms_manager;
+pub mod state;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]

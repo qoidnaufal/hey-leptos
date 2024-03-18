@@ -2,6 +2,7 @@ use super::{
     create_or_join::{CreateNewRoom, CreateOrJoinRoomButton, JoinRoom, PopUpRoomForm},
     current_user::{CurrentUser, UserMenu},
     joined_channels::{fetch_joined_channels, UserChannels},
+    logout::LogoutAction,
     ErrorTemplate,
 };
 use crate::error_template::AppError;
@@ -10,25 +11,30 @@ use leptos_router::Outlet;
 
 #[server]
 async fn validate_path(path: String) -> Result<(), ServerFnError> {
-    use crate::state::rooms_manager;
+    use crate::state::ssr::{/*auth,*/ rooms_manager};
 
     let rooms_manager = rooms_manager()?;
+    // let auth = auth()?;
 
-    let uuid = path
-        .strip_prefix("/channel/")
-        .expect("Valid uuid is needed")
-        .to_string();
+    if path.starts_with("/channel/") {
+        let room_uuid = path
+            .strip_prefix("/channel/")
+            .expect("Valid uuid is needed")
+            .to_string();
 
-    rooms_manager
-        .validate_uuid(uuid)
-        .map_err(|err| ServerFnError::new(format!("{:?}", err)))
+        rooms_manager
+            .validate_uuid(room_uuid)
+            .map_err(|err| ServerFnError::new(format!("{:?}", err)))
+    } else {
+        Ok(())
+    }
 }
 
 #[server(PublishMsg)]
 async fn publish_msg(text: String, room_uuid: String) -> Result<(), ServerFnError> {
     use crate::models::message_model::{Msg, MsgData};
-    use crate::rooms_manager::SelectClient;
-    use crate::state::{auth, pool, rooms_manager};
+    use crate::state::rooms_manager::PubSubClient;
+    use crate::state::ssr::{auth, pool, rooms_manager};
 
     let auth = auth()?;
     let pool = pool()?;
@@ -39,7 +45,7 @@ async fn publish_msg(text: String, room_uuid: String) -> Result<(), ServerFnErro
         .ok_or_else(|| ServerFnError::new("Auth does not contain user"))?;
 
     rooms_manager
-        .init(SelectClient::Publisher)
+        .init(PubSubClient::Publisher)
         .await
         .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
 
@@ -65,7 +71,7 @@ async fn publish_msg(text: String, room_uuid: String) -> Result<(), ServerFnErro
 pub fn Channel() -> impl IntoView {
     let path = leptos_router::use_location().pathname;
 
-    let path_resource = create_resource(move || path.get(), |path| validate_path(path));
+    let path_resource = create_resource(move || path.get(), validate_path);
 
     view! {
         <Transition fallback=move || {
@@ -128,7 +134,9 @@ pub fn Channel() -> impl IntoView {
     }
 }
 #[component]
-pub fn ChatPage() -> impl IntoView {
+pub fn ChatPage(logout_action: LogoutAction) -> impl IntoView {
+    provide_context(logout_action);
+
     let (display_room_form, set_display_room_form) = create_signal("hidden");
     let (display_user_menu, set_display_user_menu) = create_signal("hidden");
 

@@ -20,15 +20,15 @@ use surrealdb::engine::remote::ws::Client as SurrealClient;
 
 #[cfg(feature = "ssr")]
 use hey_leptos::{
-    app, db, fileserv,
-    models::{auth_model, user_model},
-    rooms_manager, state,
+    app, fileserv,
+    models::user_model,
+    state::{self, auth, db, rooms_manager},
 };
 
 #[cfg(feature = "ssr")]
 async fn server_fn_handler(
-    State(app_state): State<state::AppState>,
-    auth_session: auth_model::AuthSession,
+    State(app_state): State<state::ssr::AppState>,
+    auth_session: auth::ssr::AuthSession,
     request: Request<AxumBody>,
 ) -> impl IntoResponse {
     handle_server_fns_with_context(
@@ -44,8 +44,8 @@ async fn server_fn_handler(
 
 #[cfg(feature = "ssr")]
 async fn leptos_routes_handler(
-    State(app_state): State<state::AppState>,
-    auth_session: auth_model::AuthSession,
+    State(app_state): State<state::ssr::AppState>,
+    auth_session: auth::ssr::AuthSession,
     req: Request<AxumBody>,
 ) -> Response {
     let handler = leptos_axum::render_route_with_context(
@@ -64,7 +64,7 @@ async fn leptos_routes_handler(
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let pool = db::Database::init()
+    let pool = db::ssr::Database::init()
         .await
         .map_err(|err| std::io::Error::other(err))?;
 
@@ -89,7 +89,7 @@ async fn main() -> std::io::Result<()> {
     .map_err(|err| std::io::Error::other(err))?;
 
     // AppState
-    let app_state = state::AppState {
+    let app_state = state::ssr::AppState {
         pool: pool.clone(),
         leptos_options: leptos_options.clone(),
         routes: app_routes.clone(),
@@ -110,7 +110,7 @@ async fn main() -> std::io::Result<()> {
                 user_model::User,
                 String,
                 SessionSurrealPool<SurrealClient>,
-                db::Database,
+                db::ssr::Database,
             >::new(Some(pool.clone()))
             .with_config(auth_config),
         )

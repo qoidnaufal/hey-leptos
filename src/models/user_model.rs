@@ -64,7 +64,7 @@ impl User {
 #[cfg(feature = "ssr")]
 pub mod ssr {
     pub use super::{Availability, Avatar, UserData};
-    use crate::db::Database;
+    use crate::state::db::ssr::Database;
 
     impl UserData {
         pub fn new(uuid: String, user_name: String, email: String, password: String) -> Self {
