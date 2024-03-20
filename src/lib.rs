@@ -2,7 +2,6 @@
 pub mod fileserv;
 
 pub mod app;
-pub mod error_template;
 pub mod models;
 pub mod state;
 
