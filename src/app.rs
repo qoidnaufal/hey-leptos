@@ -1,8 +1,9 @@
-use crate::error_template::{AppError, ErrorTemplate};
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
 
+mod app_error;
+mod channel;
 mod chat;
 mod create_or_join;
 mod current_user;
@@ -18,16 +19,18 @@ pub enum AppPath {
     Login,
     Logout,
     Home,
+    Profile(String),
     Channel(Option<String>),
 }
 
 impl std::fmt::Display for AppPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Register => write!(f, "register"),
-            Self::Login => write!(f, "login"),
+            Self::Register => write!(f, "/register"),
+            Self::Login => write!(f, "/login"),
             Self::Logout => write!(f, "logout"),
-            Self::Home => write!(f, ""),
+            Self::Home => write!(f, "/"),
+            Self::Profile(id) => write!(f, "profile/{}", id),
             Self::Channel(id) => match id {
                 Some(id) => write!(f, "channel/{}", id),
                 None => write!(f, "channel"),
@@ -38,13 +41,7 @@ impl std::fmt::Display for AppPath {
 
 impl leptos_router::ToHref for AppPath {
     fn to_href(&self) -> Box<dyn Fn() -> String + '_> {
-        match self {
-            Self::Register => Box::new(|| Self::Register.to_string()),
-            Self::Login => Box::new(|| Self::Login.to_string()),
-            Self::Logout => Box::new(|| Self::Logout.to_string()),
-            Self::Home => Box::new(|| Self::Home.to_string()),
-            Self::Channel(id) => Box::new(|| Self::Channel(id.clone()).to_string()),
-        }
+        Box::new(|| self.to_string())
     }
 }
 
@@ -90,8 +87,8 @@ pub fn App() -> impl IntoView {
         <Title text="HEY!"/>
         <Router fallback=|| {
             let mut outside_errors = Errors::default();
-            outside_errors.insert_with_default_key(AppError::NotFound);
-            view! { <ErrorTemplate outside_errors/> }.into_view()
+            outside_errors.insert_with_default_key(app_error::AppError::NotFound);
+            view! { <app_error::ErrorTemplate outside_errors/> }.into_view()
         }>
             <main class="grid h-screen place-items-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
                 <Routes>
@@ -106,12 +103,11 @@ pub fn App() -> impl IntoView {
                             </Transition>
                         }
                     />
-                    // TODO: create a guarding mechanism here
                     <Route
                         path=AppPath::Channel(None)
                         view=move || view! { <chat::ChatPage logout_action/> }
                     >
-                        <Route path=":id" view=chat::Channel/>
+                        <Route path=":id" view=channel::Channel/>
                         <Route path="" view=|| view! {
                             <div class="h-full bg-transparent grow flex items-center justify-center">
                                 <p class="font-sans text-white text-center">"TODO: create a landing page"</p>
