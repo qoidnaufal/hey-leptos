@@ -5,10 +5,7 @@ use leptos_router::{ActionForm, FromFormData, A};
 #[server(RegisterUser)]
 async fn register(user_name: String, email: String, password: String) -> Result<(), ServerFnError> {
     use super::AppPath;
-    use crate::{
-        models::user_model::{Availability, UserData},
-        state::ssr::pool,
-    };
+    use crate::{models::user_model::UserData, state::ssr::pool};
     use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
     use rand_core::OsRng;
     use uuid::Uuid;
@@ -17,26 +14,21 @@ async fn register(user_name: String, email: String, password: String) -> Result<
 
     // std::thread::sleep(std::time::Duration::from_millis(2000));
 
-    match UserData::check_availability_by_email(&email, &pool).await {
-        Availability::Available => {
-            let salt = SaltString::generate(&mut OsRng);
-            let password = Argon2::default()
-                .hash_password(password.as_bytes(), &salt)
-                .map_err(|err| ServerFnError::new(format!("{:?}", err)))
-                .map(|pw| pw.to_string())?;
+    let salt = SaltString::generate(&mut OsRng);
+    let password = Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|err| ServerFnError::new(format!("{:?}", err)))
+        .map(|pw| pw.to_string())?;
 
-            let uuid = Uuid::new_v4().as_simple().to_string();
-            let new_user = UserData::new(uuid, user_name, email.clone(), password);
+    let uuid = Uuid::new_v4().as_simple().to_string();
+    let new_user = UserData::new(uuid, user_name, email.clone(), password);
 
-            match new_user.insert_into_db(&pool).await {
-                Ok(_) => {
-                    leptos_axum::redirect(&AppPath::Login.to_string());
-                    Ok(())
-                }
-                Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
-            }
+    match new_user.insert_into_db(&pool).await {
+        Ok(_) => {
+            leptos_axum::redirect(&AppPath::Login.to_string());
+            Ok(())
         }
-        _ => Err(ServerFnError::new("Email has been taken")),
+        Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
     }
 }
 

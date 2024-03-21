@@ -5,7 +5,10 @@ pub async fn create_new_room(room_name: String) -> Result<(), ServerFnError> {
     use super::AppPath;
     use crate::{
         models::user_model::UserData,
-        state::ssr::{auth, pool, rooms_manager},
+        state::{
+            rooms_manager::ssr::RoomsManager,
+            ssr::{auth, pool},
+        },
     };
 
     let auth = auth()?;
@@ -18,12 +21,12 @@ pub async fn create_new_room(room_name: String) -> Result<(), ServerFnError> {
         .await
         .ok_or_else(|| ServerFnError::new("User does not exist"))?;
 
-    let rooms_manager = rooms_manager()?;
+    // let rooms_manager = rooms_manager()?;
 
-    match rooms_manager.new_room(room_name.clone(), user) {
+    match RoomsManager::new_room(room_name.clone(), user, &pool).await {
         Ok(room_uuid) => {
             user_data
-                .add_channel((room_uuid.clone(), room_name), &pool)
+                .add_channel(room_uuid.clone(), &pool)
                 .await
                 .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
 
@@ -40,30 +43,29 @@ pub async fn join_room(room_uuid: String) -> Result<(), ServerFnError> {
     use super::AppPath;
     use crate::{
         models::user_model::UserData,
-        state::ssr::{auth, pool, rooms_manager},
+        state::{
+            rooms_manager::ssr::RoomsManager,
+            ssr::{auth, pool},
+        },
     };
 
     let auth = auth()?;
     let pool = pool()?;
-    let rooms_manager = rooms_manager()?;
 
     let user = auth
         .current_user
         .ok_or_else(|| ServerFnError::new("Auth does not contain user"))?;
+
     let user_data = UserData::get_from_uuid(&user.uuid, &pool)
         .await
         .ok_or_else(|| ServerFnError::new("User does not exist"))?;
 
-    let rooms_name = rooms_manager
-        .get_room_name(&room_uuid)
-        .ok_or_else(|| ServerFnError::new("Room does not exist"))?;
-
     user_data
-        .add_channel((room_uuid.clone(), rooms_name), &pool)
+        .add_channel(room_uuid.clone(), &pool)
         .await
         .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
 
-    match rooms_manager.join_room(&room_uuid, user) {
+    match RoomsManager::join_room(&room_uuid, user, &pool).await {
         Ok(_) => Ok(leptos_axum::redirect(
             &AppPath::Channel(Some(room_uuid)).to_string(),
         )),

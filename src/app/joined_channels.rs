@@ -1,14 +1,34 @@
 use leptos::*;
 use leptos_router::A;
+use serde::{Deserialize, Serialize};
 
-type ChannelsResource = Resource<(usize, usize), Result<Vec<(String, String)>, ServerFnError>>;
+type ChannelsResource = Resource<(usize, usize), Result<Vec<JoinedChannel>, ServerFnError>>;
+
+#[derive(Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct JoinedChannel {
+    uuid: String,
+    name: String,
+}
+
+#[cfg(feature = "ssr")]
+impl JoinedChannel {
+    fn new(uuid: String, name: String) -> Self {
+        Self { uuid, name }
+    }
+}
+
+// test
 
 #[server(FetchJoinedChannels, "/api", "GetJson")]
-pub async fn fetch_joined_channels() -> Result<Vec<(String, String)>, ServerFnError> {
+pub async fn fetch_joined_channels() -> Result<Vec<JoinedChannel>, ServerFnError> {
     use crate::{
         models::user_model::UserData,
-        state::ssr::{auth, pool},
+        state::{
+            rooms_manager::{ssr::RoomsManager, RoomsManagerError},
+            ssr::{auth, pool},
+        },
     };
+    use futures::future::join_all;
 
     let auth = auth()?;
     let pool = pool()?;
@@ -21,7 +41,17 @@ pub async fn fetch_joined_channels() -> Result<Vec<(String, String)>, ServerFnEr
         .await
         .ok_or_else(|| ServerFnError::new("Invalid user: Entry not found in db"))?;
 
-    Ok(user_data.joined_channels)
+    let joined_channels = user_data
+        .joined_channels
+        .iter()
+        .map(|room_uuid| async {
+            let room_name = RoomsManager::get_room_name(room_uuid, &pool).await?;
+            Ok::<JoinedChannel, RoomsManagerError>(JoinedChannel::new(room_uuid.clone(), room_name))
+        })
+        .map(|res| async { res.await.unwrap_or_default() });
+    let joined_channels = join_all(joined_channels).await;
+
+    Ok(joined_channels)
 }
 
 #[component]
@@ -32,24 +62,22 @@ pub fn UserChannels(channels_resource: ChannelsResource) -> impl IntoView {
             each=move || {
                 channels_resource
                     .get()
-                    .unwrap_or_else(|| Ok(Vec::<(String, String)>::new()))
+                    .unwrap_or_else(|| Ok(Vec::<JoinedChannel>::new()))
                     .unwrap_or_default()
                     .into_iter()
                     .enumerate()
             }
-            key=|(_, channel_tuple)| channel_tuple.clone()
+            key=|(_, joined_channel)| joined_channel.uuid.clone()
             children=move |(idx, _)| {
                 let channel = create_memo(move |_| {
-                    channels_resource.and_then(|vec| {
-                        vec.get(idx)
-                            .unwrap()
-                            .clone()
+                    channels_resource.and_then(|result| {
+                        result.get(idx).unwrap().clone()
                     })
-                    .unwrap_or(Ok((String::new(), String::new())))
+                    .unwrap_or(Ok(JoinedChannel::default()))
                     .unwrap_or_default()
                 });
 
-                let room_uuid = channel.get().0;
+                let room_uuid = channel.get().uuid;
                 let path = leptos_router::use_location().pathname;
 
                 let active = move |room_id| {move ||
@@ -60,9 +88,9 @@ pub fn UserChannels(channels_resource: ChannelsResource) -> impl IntoView {
                     }};
 
                 view! {
-                    <A href=channel.get().0>
+                    <A href=channel.get().uuid>
                         <button class={active(room_uuid)}>
-                            { move || channel.get().1 }
+                            { move || channel.get().name }
                         </button>
                     </A>
                 }

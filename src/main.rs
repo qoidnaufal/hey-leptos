@@ -68,11 +68,12 @@ async fn main() -> std::io::Result<()> {
         .await
         .map_err(|err| std::io::Error::other(err))?;
 
-    let rooms_manager = rooms_manager::ssr::RoomsManager::new();
+    let rooms_manager =
+        rooms_manager::ssr::RoomsManager::new().map_err(|err| std::io::Error::other(err))?;
 
     let conf = get_configuration(None)
         .await
-        .map_err(|err| std::io::Error::other(format!("{:?}", err)))?;
+        .map_err(|err| std::io::Error::other(err))?;
 
     let leptos_options = conf.leptos_options;
     let addr = leptos_options.site_addr;
