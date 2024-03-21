@@ -3,10 +3,13 @@ use leptos::*;
 
 #[server]
 async fn validate_path(path: String) -> Result<(), ServerFnError> {
-    use crate::state::ssr::{auth, rooms_manager};
+    use crate::state::{
+        rooms_manager::ssr::RoomsManager,
+        ssr::{auth, pool},
+    };
 
-    let rooms_manager = rooms_manager()?;
     let auth = auth()?;
+    let pool = pool()?;
 
     if !auth.is_authenticated() {
         return Err(ServerFnError::new(
@@ -20,8 +23,8 @@ async fn validate_path(path: String) -> Result<(), ServerFnError> {
             .expect("Valid uuid is needed")
             .to_string();
 
-        rooms_manager
-            .validate_uuid(room_uuid)
+        RoomsManager::validate_uuid(room_uuid, &pool)
+            .await
             .map_err(|err| ServerFnError::new(format!("{:?}", err)))
     } else {
         Ok(())

@@ -1,13 +1,6 @@
 use leptos::*;
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Availability {
-    Available,
-    Unavailable,
-}
-
-// ---- avatar
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Avatar {
@@ -40,13 +33,13 @@ pub struct UserData {
     pub user_name: String,
     pub email: String,
     pub password: String,
-    pub joined_channels: Vec<(String, String)>,
+    pub joined_channels: HashSet<String>,
     pub avatar: Avatar,
 }
 
 // ---- user to expose to the client
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct User {
     pub uuid: String,
     pub user_name: String,
@@ -63,8 +56,9 @@ impl User {
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    pub use super::{Availability, Avatar, UserData};
+    pub use super::{Avatar, UserData};
     use crate::state::db::ssr::Database;
+    use std::collections::HashSet;
 
     impl UserData {
         pub fn new(uuid: String, user_name: String, email: String, password: String) -> Self {
@@ -77,15 +71,30 @@ pub mod ssr {
                 user_name,
                 email,
                 password,
-                joined_channels: Vec::<(String, String)>::new(),
+                joined_channels: HashSet::<String>::new(),
                 avatar,
             }
         }
 
         pub async fn insert_into_db(&self, pool: &Database) -> Result<(), surrealdb::Error> {
+            if pool
+                .client
+                .query("SELECT * FROM type::table($table) WHERE email = $email")
+                .bind(("table", "user_data"))
+                .bind(("email", &self.email))
+                .await?
+                .take::<Option<Self>>(0)
+                .unwrap_or(None)
+                .is_some()
+            {
+                return Err(surrealdb::Error::Api(surrealdb::error::Api::InternalError(
+                    "User already exist".to_string(),
+                )));
+            }
+
             match pool
                 .client
-                .create::<Option<Self>>(("user_data", self.uuid.clone()))
+                .create::<Option<Self>>(("user_data", &self.uuid))
                 .content(self)
                 .await
             {
@@ -96,19 +105,23 @@ pub mod ssr {
 
         pub async fn add_channel(
             &self,
-            channel: (String, String),
+            room_uuid: String,
             pool: &Database,
         ) -> Result<(), surrealdb::Error> {
             let find_entry = pool
                 .client
-                .select::<Option<Self>>(("user_data", self.uuid.clone()))
+                .select::<Option<Self>>(("user_data", &self.uuid))
                 .await?;
 
             if let Some(mut user_data) = find_entry {
-                user_data.joined_channels.push(channel);
+                if !user_data.joined_channels.insert(room_uuid) {
+                    return Err(surrealdb::Error::Api(surrealdb::error::Api::InternalError(
+                        "Already joined the channel".to_string(),
+                    )));
+                }
 
                 pool.client
-                    .update::<Option<Self>>(("user_data", self.uuid.clone()))
+                    .update::<Option<Self>>(("user_data", &self.uuid))
                     .merge(user_data)
                     .await?;
             }
@@ -123,37 +136,26 @@ pub mod ssr {
         ) -> Result<(), surrealdb::Error> {
             let find_entry = pool
                 .client
-                .select::<Option<Self>>(("user_data", self.uuid.clone()))
+                .select::<Option<Self>>(("user_data", &self.uuid))
                 .await?;
 
             if let Some(mut user_data) = find_entry {
+                if user_data.joined_channels.get(&channel).is_none() {
+                    return Err(surrealdb::Error::Api(surrealdb::error::Api::InternalError(
+                        "Room does not exist".to_string(),
+                    )));
+                }
                 user_data
                     .joined_channels
-                    .retain(|(room_uuid, _)| *room_uuid != channel);
+                    .retain(|room_uuid| *room_uuid != channel);
 
                 pool.client
-                    .update::<Option<Self>>(("user_data", self.uuid.clone()))
+                    .update::<Option<Self>>(("user_data", &self.uuid))
                     .merge(user_data)
                     .await?;
             }
 
             Ok(())
-        }
-
-        pub async fn check_availability_by_email(email: &str, pool: &Database) -> Availability {
-            match pool
-                .client
-                .query("SELECT * FROM type::table($table) WHERE email = $email")
-                .bind(("table", "user_data"))
-                .bind(("email", email))
-                .await
-            {
-                Ok(mut maybe_user) => match maybe_user.take::<Option<Self>>(0) {
-                    Ok(None) => Availability::Available,
-                    _ => Availability::Unavailable,
-                },
-                _ => Availability::Unavailable,
-            }
         }
 
         pub async fn get_from_email(

@@ -1,9 +1,7 @@
 use crate::models::user_model::User;
-
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use thiserror::Error;
 
 pub enum PubSubClient {
     All,
@@ -11,28 +9,38 @@ pub enum PubSubClient {
     Subscriber,
 }
 
-#[derive(Debug)]
-pub enum RoomError {
+#[derive(Debug, Error)]
+pub enum RoomsManagerError {
+    #[error("Room Does Not Exist")]
     RoomDoesNotExist,
-    RoomCreationFailed,
+    #[cfg(feature = "ssr")]
+    #[error("Room Creation Failed")]
+    FromDbError(#[from] surrealdb::Error),
+    #[error("User Already Inside")]
     UserAlreadyInside,
+    #[error("User Does Not Exist")]
     UserDoesNotExist,
-    MsgSendError(String),
-    MsgRecvError(String),
+    #[cfg(feature = "ssr")]
+    #[error("Msg Send Error: {0}")]
+    FromRedisError(#[from] fred::error::RedisError),
+    #[error("Other: {0}")]
     Other(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Room {
     pub room_name: String,
     pub room_uuid: String,
-    pub users: Arc<RwLock<HashMap<String, User>>>,
+    pub users: HashSet<User>,
 }
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    use super::{PubSubClient, Room, RoomError};
-    use crate::models::{message_model::Msg, user_model::User};
+    use super::{PubSubClient, Room, RoomsManagerError};
+    use crate::{
+        models::{message_model::Msg, user_model::User},
+        state::db::ssr::Database,
+    };
     use fred::{
         clients::{RedisClient, SubscriberClient},
         error::RedisError,
@@ -40,17 +48,20 @@ pub mod ssr {
         types::Builder,
     };
     use leptos::logging;
-    use std::{
-        collections::HashMap,
-        sync::{Arc, RwLock},
-    };
+    use std::collections::HashSet;
     use tokio::task::JoinHandle;
     use uuid::Uuid;
+
+    #[derive(Debug, Clone)]
+    pub struct RoomsManager {
+        pub publisher_client: RedisClient,
+        pub subscriber_client: SubscriberClient,
+    }
 
     impl Room {
         fn new(room_name: String) -> Self {
             let room_uuid = Uuid::new_v4().as_simple().to_string();
-            let users = Arc::new(RwLock::new(HashMap::<String, User>::new()));
+            let users = HashSet::<User>::new();
 
             Self {
                 room_name,
@@ -59,54 +70,37 @@ pub mod ssr {
             }
         }
 
-        pub fn insert_user(&self, user: User) -> Result<(), RoomError> {
-            let mut users = self.users.write().unwrap();
-
-            if !users.contains_key(&user.uuid) {
-                users.insert(user.uuid.clone(), user);
-                Ok(())
-            } else {
-                Err(RoomError::UserAlreadyInside)
+        fn insert_user(&mut self, user: User) -> Result<(), RoomsManagerError> {
+            if !self.users.insert(user) {
+                return Err(RoomsManagerError::UserAlreadyInside);
             }
+
+            Ok(())
         }
 
-        pub fn remove_user(&self, user: User) -> Result<(), RoomError> {
-            let mut users = self.users.write().unwrap();
-
-            if users.contains_key(&user.uuid) {
-                users.retain(|k, _| *k != user.uuid);
+        fn _remove_user(&mut self, user: User) -> Result<(), RoomsManagerError> {
+            if self.users.contains(&user) {
+                self.users.retain(|k| *k != user);
                 Ok(())
             } else {
-                Err(RoomError::UserDoesNotExist)
+                Err(RoomsManagerError::UserDoesNotExist)
             }
         }
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct RoomsManager {
-        pub publisher_client: RedisClient,
-        pub subscriber_client: SubscriberClient,
-        pub rooms: Arc<RwLock<HashMap<String, Room>>>,
     }
 
     impl RoomsManager {
-        pub fn new() -> Self {
+        pub fn new() -> Result<Self, RoomsManagerError> {
             let publisher_client = RedisClient::default();
-            let subscriber_client = Builder::default_centralized()
-                .build_subscriber_client()
-                .map_err(|err| logging::log!("{:?}", err))
-                .unwrap();
-            let rooms = Arc::new(RwLock::new(HashMap::<String, Room>::new()));
+            let subscriber_client = Builder::default_centralized().build_subscriber_client()?;
 
-            Self {
+            Ok(Self {
                 publisher_client,
                 subscriber_client,
-                rooms,
-            }
+            })
         }
 
-        pub async fn init(&self, which: PubSubClient) -> Result<(), RedisError> {
-            match which {
+        pub async fn init(&self, client: PubSubClient) -> Result<(), RoomsManagerError> {
+            match client {
                 PubSubClient::Publisher => {
                     self.publisher_client.init().await?;
                 }
@@ -122,8 +116,8 @@ pub mod ssr {
             Ok(())
         }
 
-        pub async fn quit(&self, which: PubSubClient) -> Result<(), RedisError> {
-            match which {
+        pub async fn quit(&self, client: PubSubClient) -> Result<(), RoomsManagerError> {
+            match client {
                 PubSubClient::Publisher => {
                     self.publisher_client.quit().await?;
                 }
@@ -139,41 +133,78 @@ pub mod ssr {
             Ok(())
         }
 
-        pub fn new_room(&self, room_name: String, user: User) -> Result<String, RoomError> {
-            let mut rooms = self.rooms.write().unwrap();
-            let room = Room::new(room_name);
+        pub async fn new_room(
+            room_name: String,
+            user: User,
+            pool: &Database,
+        ) -> Result<String, RoomsManagerError> {
+            // let mut rooms = self.rooms.write().unwrap();
+            let mut room = Room::new(room_name);
 
             room.insert_user(user)?;
 
-            rooms.insert(room.room_uuid.clone(), room.clone());
+            pool.client
+                .create::<Option<Room>>(("room_data", &room.room_uuid))
+                .content(room.clone())
+                .await?;
+
+            // rooms.insert(room.room_uuid.clone(), room.clone());
 
             Ok(room.room_uuid)
         }
 
-        pub fn join_room(&self, room_uuid: &str, user: User) -> Result<(), RoomError> {
-            let rooms = self.rooms.write().unwrap();
+        pub async fn join_room(
+            room_uuid: &str,
+            user: User,
+            pool: &Database,
+        ) -> Result<(), RoomsManagerError> {
+            // let mut rooms = self.rooms.write().unwrap();
+            let find_entry = pool
+                .client
+                .select::<Option<Room>>(("room_data", room_uuid))
+                .await?;
 
-            match rooms.get(room_uuid) {
-                Some(room) => room.insert_user(user),
-                None => Err(RoomError::RoomDoesNotExist),
+            if let Some(mut room) = find_entry {
+                room.insert_user(user)?;
+
+                pool.client
+                    .update::<Option<Room>>(("room_data", &room.room_uuid))
+                    .merge(room)
+                    .await?;
+            }
+
+            Ok(())
+        }
+
+        pub async fn get_room_name(
+            room_uuid: &str,
+            pool: &Database,
+        ) -> Result<String, RoomsManagerError> {
+            // let rooms = self.rooms.read().unwrap();
+            let find_entry = pool
+                .client
+                .select::<Option<Room>>(("room_data", room_uuid))
+                .await?;
+
+            match find_entry {
+                Some(room) => Ok(room.room_name),
+                None => Err(RoomsManagerError::RoomDoesNotExist),
             }
         }
 
-        pub fn get_room_name(&self, room_uuid: &str) -> Option<String> {
-            let rooms = self.rooms.read().unwrap();
+        pub async fn validate_uuid(
+            room_uuid: String,
+            pool: &Database,
+        ) -> Result<(), RoomsManagerError> {
+            // let rooms = self.rooms.read().unwrap();
+            let find_entry = pool
+                .client
+                .select::<Option<Room>>(("room_data", room_uuid))
+                .await?;
 
-            match rooms.get(room_uuid) {
-                Some(room) => Some(room.room_name.clone()),
-                None => None,
-            }
-        }
-
-        pub fn validate_uuid(&self, room_uuid: String) -> Result<(), RoomError> {
-            let rooms = self.rooms.read().unwrap();
-
-            match rooms.get(&room_uuid) {
+            match find_entry {
                 Some(_) => Ok(()),
-                None => Err(RoomError::RoomDoesNotExist),
+                None => Err(RoomsManagerError::RoomDoesNotExist),
             }
         }
 
