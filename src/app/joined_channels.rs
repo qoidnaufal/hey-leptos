@@ -55,7 +55,7 @@ pub async fn fetch_joined_channels() -> Result<Vec<JoinedChannel>, ServerFnError
 }
 
 #[component]
-pub fn UserChannels(channels_resource: ChannelsResource) -> impl IntoView {
+pub fn JoinedChannels(channels_resource: ChannelsResource) -> impl IntoView {
     view! {
         <For
         {move || channels_resource.track()}

@@ -1,7 +1,7 @@
 use super::{
     create_or_join::{CreateNewRoom, CreateOrJoinRoomButton, JoinRoom, PopUpRoomForm},
     current_user::{CurrentUser, UserMenu},
-    joined_channels::{fetch_joined_channels, UserChannels},
+    joined_channels::{fetch_joined_channels, JoinedChannels},
     logout::LogoutAction,
 };
 use leptos::*;
@@ -51,7 +51,7 @@ pub fn ChatPage(logout_action: LogoutAction) -> impl IntoView {
                         class="flex flex-col items-center h-full w-[70px] bg-slate-950/[.65] rounded-bl-xl pb-2"
                     >
                         <div id="channel-list" class="flex flex-col grow bg-transparent">
-                            <UserChannels channels_resource/>
+                            <JoinedChannels channels_resource/>
                         </div>
                         <CreateOrJoinRoomButton display_room_form set_display_room_form/>
                         <PopUpRoomForm display_room_form create_room_action join_room_action/>

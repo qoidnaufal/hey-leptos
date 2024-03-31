@@ -1,10 +1,13 @@
-use super::app_error::{AppError, ErrorTemplate};
+use super::{
+    app_error::{AppError, ErrorTemplate},
+    channel_header::ChannelHeader,
+};
 use crate::models::message_model::MsgResponse;
 use chrono::Local;
 use leptos::*;
 
 #[server]
-async fn validate_path(path: String) -> Result<(), ServerFnError> {
+async fn validate_path(path: String) -> Result<String, ServerFnError> {
     use crate::state::{auth, pool, rooms_manager::RoomsManager};
 
     let auth = auth()?;
@@ -26,7 +29,7 @@ async fn validate_path(path: String) -> Result<(), ServerFnError> {
             .await
             .map_err(|err| ServerFnError::new(format!("{:?}", err)))
     } else {
-        Ok(())
+        Ok(String::new())
     }
 }
 
@@ -76,6 +79,7 @@ async fn fetch_msg(room_uuid: String) -> Result<Vec<MsgResponse>, ServerFnError>
     match MsgResponse::get_all_msg(&room_uuid, &pool).await {
         Ok(mut vec_msg) => {
             vec_msg.sort();
+            vec_msg.reverse();
             Ok(vec_msg)
         }
         Err(err) => Err(ServerFnError::new(err)),
@@ -95,32 +99,35 @@ pub fn Channel() -> impl IntoView {
             view! { <p>"Loading..."</p> }
         }>
             {move || {
-                match path_resource.get().unwrap_or(Ok(())) {
-                    Ok(_) => {
-                        let message_ref = create_node_ref::<html::Input>();
+                match path_resource.get().unwrap_or(Ok(String::new())) {
+                    Ok(channel_name) => {
+                        let message_ref = create_node_ref::<html::Div>();
                         let publish_msg = create_server_action::<PublishMsg>();
-                        let send = move |ev: ev::SubmitEvent| {
+                        let manage_input = move |ev: ev::KeyboardEvent| {
                             ev.prevent_default();
-                            let path = path.get();
-                            let room_uuid = path
-                                .strip_prefix("/channel/")
-                                .expect("Provide valid uuid!")
-                                .to_string();
-                            let text = message_ref
-                                .get()
-                                .expect("input element doesn't exist")
-                                .value();
-                            publish_msg.dispatch(PublishMsg { text, room_uuid });
-                            message_ref.get().expect("input element doesn't exist").set_value("");
+                            if !ev.shift_key() && ev.key() == "Enter" {
+                                let path = path.get();
+                                let room_uuid = path
+                                    .strip_prefix("/channel/")
+                                    .expect("Provide valid uuid!")
+                                    .to_string();
+                                let text = message_ref
+                                    .get()
+                                    .expect("input element doesn't exist")
+                                    .inner_text();
+                                publish_msg.dispatch(PublishMsg { text, room_uuid });
+                                message_ref.get().expect("input element doesn't exist").set_inner_text("");
+                            }
                         };
 
                         view! {
                             <div
-                                class="h-full w-full bg-transparent flex pt-2 flex-col overflow-y-hidden"
+                                class="h-full w-full bg-transparent flex pt flex-col overflow-y-hidden"
                                 id="chat-interface"
                             >
+                                <ChannelHeader channel_name/>
                                 <div
-                                    class="flex flex-col h-[44rem] w-full bg-transparent px-4 overflow-y-scroll"
+                                    class="flex flex-col-reverse h-[44rem] w-full bg-transparent px-4 overflow-y-scroll"
                                     id="chat-log"
                                 >
                                     <For
@@ -168,16 +175,19 @@ pub fn Channel() -> impl IntoView {
                                     />
                                 </div>
                                 <form
-                                    on:submit=send
                                     class="px-4 h-32 flex flex-row items-center"
                                 >
-                                    <input
+                                    <div
+                                        on:keyup=manage_input
                                         id="input"
+                                        role="textbox"
+                                        aria-multiline="true"
+                                        contenteditable="true"
                                         name="message"
                                         _ref=message_ref
-                                        placeholder="Type your message..."
-                                        class="grow rounded-md h-12 text-white font-sans pl-2 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto text-base"
-                                    />
+                                        aria-label="Type your message..."
+                                        class="grow rounded-md min-h-12 max-h-[120px] h-fit overflow-y-scroll text-white font-sans mb-2 px-2 py-1 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto text-base"
+                                    ></div>
                                 </form>
                             </div>
                         }

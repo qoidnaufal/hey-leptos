@@ -4,6 +4,7 @@ use leptos_router::*;
 
 mod app_error;
 mod channel;
+mod channel_header;
 mod chat;
 mod create_or_join;
 mod current_user;
