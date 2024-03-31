@@ -148,14 +148,14 @@ impl RoomsManager {
     pub async fn validate_uuid(
         room_uuid: String,
         pool: &Database,
-    ) -> Result<(), RoomsManagerError> {
+    ) -> Result<String, RoomsManagerError> {
         let find_entry = pool
             .client
             .select::<Option<Room>>(("room_data", room_uuid))
             .await?;
 
         match find_entry {
-            Some(_) => Ok(()),
+            Some(room) => Ok(room.room_name),
             None => Err(RoomsManagerError::RoomDoesNotExist),
         }
     }
