@@ -24,8 +24,8 @@ pub async fn fetch_joined_channels() -> Result<Vec<JoinedChannel>, ServerFnError
     use crate::{
         models::user_model::UserData,
         state::{
-            rooms_manager::{ssr::RoomsManager, RoomsManagerError},
-            ssr::{auth, pool},
+            auth, pool,
+            rooms_manager::{RoomsManager, RoomsManagerError},
         },
     };
     use futures::future::join_all;
@@ -80,8 +80,8 @@ pub fn UserChannels(channels_resource: ChannelsResource) -> impl IntoView {
                 let room_uuid = channel.get().uuid;
                 let path = leptos_router::use_location().pathname;
 
-                let active = move |room_id| {move ||
-                    if path.get().contains(&room_id) {
+                let active = move |id| {move ||
+                    if path.get().contains(&id) {
                         "text-xl text-ellipsis overflow-hidden uppercase w-12 h-12 rounded-xl bg-green-300 font-bold border-4 border-sky-500 border-solid mt-2 px-2"
                     } else {
                         "text-xl text-white text-ellipsis overflow-hidden uppercase w-12 h-12 rounded-xl bg-sky-500 hover:bg-green-300 border-none mt-2 px-2"

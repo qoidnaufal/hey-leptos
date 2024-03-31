@@ -1,41 +1,35 @@
 #[cfg(feature = "ssr")]
-use axum::{
-    body::Body as AxumBody,
-    extract::State,
-    http::Request,
-    response::{IntoResponse, Response},
-    routing::get,
-    Router,
-};
-#[cfg(feature = "ssr")]
-use axum_session::{SessionConfig, SessionLayer, SessionStore};
-#[cfg(feature = "ssr")]
-use axum_session_auth::{AuthConfig, AuthSessionLayer, SessionSurrealPool};
-#[cfg(feature = "ssr")]
-use leptos::*;
-#[cfg(feature = "ssr")]
-use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes};
-#[cfg(feature = "ssr")]
-use surrealdb::engine::remote::ws::Client as SurrealClient;
-
-#[cfg(feature = "ssr")]
-use hey_leptos::{
-    app, fileserv,
-    models::user_model,
-    state::{self, auth, db, rooms_manager},
+use {
+    axum::{
+        body::Body as AxumBody,
+        extract::State,
+        http::Request,
+        response::{IntoResponse, Response},
+        routing::get,
+        Router,
+    },
+    axum_session::{SessionConfig, SessionLayer, SessionStore},
+    axum_session_auth::{AuthConfig, AuthSessionLayer, SessionSurrealPool},
+    hey_leptos::{
+        app, fileserv,
+        models::user_model,
+        state::{self, auth, db},
+    },
+    leptos::*,
+    leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes},
+    surrealdb::engine::remote::ws::Client as SurrealClient,
 };
 
 #[cfg(feature = "ssr")]
 async fn server_fn_handler(
-    State(app_state): State<state::ssr::AppState>,
-    auth_session: auth::ssr::AuthSession,
+    State(app_state): State<state::AppState>,
+    auth_session: auth::AuthSession,
     request: Request<AxumBody>,
 ) -> impl IntoResponse {
     handle_server_fns_with_context(
         move || {
             provide_context(auth_session.clone());
             provide_context(app_state.pool.clone());
-            provide_context(app_state.rooms_manager.clone());
         },
         request,
     )
@@ -44,8 +38,8 @@ async fn server_fn_handler(
 
 #[cfg(feature = "ssr")]
 async fn leptos_routes_handler(
-    State(app_state): State<state::ssr::AppState>,
-    auth_session: auth::ssr::AuthSession,
+    State(app_state): State<state::AppState>,
+    auth_session: auth::AuthSession,
     req: Request<AxumBody>,
 ) -> Response {
     let handler = leptos_axum::render_route_with_context(
@@ -54,7 +48,6 @@ async fn leptos_routes_handler(
         move || {
             provide_context(auth_session.clone());
             provide_context(app_state.pool.clone());
-            provide_context(app_state.rooms_manager.clone());
         },
         app::App,
     );
@@ -64,12 +57,9 @@ async fn leptos_routes_handler(
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let pool = db::ssr::Database::init()
+    let pool = db::Database::init()
         .await
         .map_err(|err| std::io::Error::other(err))?;
-
-    let rooms_manager =
-        rooms_manager::ssr::RoomsManager::new().map_err(|err| std::io::Error::other(err))?;
 
     let conf = get_configuration(None)
         .await
@@ -90,16 +80,14 @@ async fn main() -> std::io::Result<()> {
     .map_err(|err| std::io::Error::other(err))?;
 
     // AppState
-    let app_state = state::ssr::AppState {
+    let app_state = state::AppState {
         pool: pool.clone(),
         leptos_options: leptos_options.clone(),
         routes: app_routes.clone(),
-        rooms_manager,
     };
 
     // Router
     let router = Router::new()
-        // .route("/channel/:room_uuid", get(messaging::msg_subscriber))
         .route(
             "/api/*fn_name",
             get(server_fn_handler).post(server_fn_handler),
@@ -111,7 +99,7 @@ async fn main() -> std::io::Result<()> {
                 user_model::User,
                 String,
                 SessionSurrealPool<SurrealClient>,
-                db::ssr::Database,
+                db::Database,
             >::new(Some(pool.clone()))
             .with_config(auth_config),
         )

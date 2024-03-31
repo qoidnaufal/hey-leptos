@@ -8,7 +8,7 @@ type LoginAction = Action<UserLogin, Result<(), ServerFnError>>;
 pub async fn login(email: String, password: String) -> Result<(), ServerFnError> {
     use super::AppPath;
     use crate::models::user_model::UserData;
-    use crate::state::ssr::{auth, pool};
+    use crate::state::{auth, pool};
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
     let pool = pool()?;
@@ -37,8 +37,6 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
 
 #[component]
 pub fn LoginPage(login_action: LoginAction) -> impl IntoView {
-    // let login_action = create_server_action::<UserLogin>();
-
     let (button_text, set_button_text) = create_signal("Login");
 
     let validate = move |ev: ev::SubmitEvent| {
@@ -53,7 +51,7 @@ pub fn LoginPage(login_action: LoginAction) -> impl IntoView {
     view! {
         <div
             id="loginpage"
-            class="flex-col content-center bg-slate-800/[.65] py-2.5 px-8 rounded-xl size-[27rem]"
+            class="flex flex-col bg-slate-800/[.65] py-2.5 px-8 rounded-xl size-[27rem]"
         >
             <h1 class="mt-5 text-white text-center text-xl">"Login"</h1>
             <ActionForm
@@ -93,7 +91,7 @@ pub fn LoginPage(login_action: LoginAction) -> impl IntoView {
                 >
                     {move || login_action.value().get()}
                 </ErrorBoundary>
-                <button class="mt-3 w-full bg-sky-500 hover:bg-green-300 rounded-lg border-0 w-fit py-1 px-1">
+                <button class="mt-3 w-full bg-sky-500 hover:bg-green-300 rounded-lg border-0 py-1 px-1">
                     {move || button_text.get()}
                 </button>
             </ActionForm>

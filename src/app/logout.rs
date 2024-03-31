@@ -6,7 +6,7 @@ pub type LogoutAction = Action<UserLogout, Result<(), ServerFnError>>;
 #[server(UserLogout)]
 pub async fn logout() -> Result<(), ServerFnError> {
     use super::AppPath;
-    use crate::state::ssr::auth;
+    use crate::state::auth;
 
     let auth = auth()?;
     // let uuid = auth.current_user.clone().expect("There's no user!").uuid;
