@@ -5,8 +5,9 @@ use leptos_router::{ActionForm, FromFormData, A};
 #[server(RegisterUser)]
 async fn register(user_name: String, email: String, password: String) -> Result<(), ServerFnError> {
     use super::AppPath;
-    use crate::{models::user_model::UserData, state::ssr::pool};
+    use crate::{models::user_model::UserData, state::pool};
     use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
+    use chrono::Utc;
     use rand_core::OsRng;
     use uuid::Uuid;
 
@@ -21,7 +22,8 @@ async fn register(user_name: String, email: String, password: String) -> Result<
         .map(|pw| pw.to_string())?;
 
     let uuid = Uuid::new_v4().as_simple().to_string();
-    let new_user = UserData::new(uuid, user_name, email.clone(), password);
+    let created_at = Utc::now();
+    let new_user = UserData::new(uuid, user_name, email.clone(), password, created_at);
 
     match new_user.insert_into_db(&pool).await {
         Ok(_) => {
@@ -99,7 +101,7 @@ pub fn RegisterPage() -> impl IntoView {
                 </ErrorBoundary>
                 <button
                     type="submit"
-                    class="mt-3 w-full bg-sky-500 hover:bg-green-300 rounded-lg border-0 w-fit py-1 px-1"
+                    class="mt-3 w-full bg-sky-500 hover:bg-green-300 rounded-lg border-0 py-1 px-1"
                 >
                     {move || button_text.get()}
                 </button>

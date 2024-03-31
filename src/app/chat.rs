@@ -11,8 +11,8 @@ use leptos_router::Outlet;
 pub fn ChatPage(logout_action: LogoutAction) -> impl IntoView {
     provide_context(logout_action);
 
-    let (display_room_form, set_display_room_form) = create_signal("hidden");
-    let (display_user_menu, set_display_user_menu) = create_signal("hidden");
+    let (display_room_form, set_display_room_form) = create_signal(false);
+    let (display_user_menu, set_display_user_menu) = create_signal(false);
 
     // ---- handle channels fetching
 

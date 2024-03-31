@@ -1,12 +1,11 @@
 use super::app_error::{AppError, ErrorTemplate};
+use crate::models::message_model::MsgResponse;
+use chrono::Local;
 use leptos::*;
 
 #[server]
 async fn validate_path(path: String) -> Result<(), ServerFnError> {
-    use crate::state::{
-        rooms_manager::ssr::RoomsManager,
-        ssr::{auth, pool},
-    };
+    use crate::state::{auth, pool, rooms_manager::RoomsManager};
 
     let auth = auth()?;
     let pool = pool()?;
@@ -33,44 +32,53 @@ async fn validate_path(path: String) -> Result<(), ServerFnError> {
 
 #[server(PublishMsg)]
 async fn publish_msg(text: String, room_uuid: String) -> Result<(), ServerFnError> {
-    use crate::models::message_model::{Msg, MsgData};
-    use crate::state::rooms_manager::PubSubClient;
-    use crate::state::ssr::{auth, pool, rooms_manager};
+    use crate::models::message_model::MsgData;
+    use crate::state::{auth, pool};
+    use chrono::Utc;
 
     let auth = auth()?;
     let pool = pool()?;
-    let rooms_manager = rooms_manager()?;
 
     let user = auth
         .current_user
         .ok_or_else(|| ServerFnError::new("Auth does not contain user"))?;
 
-    rooms_manager
-        .init(PubSubClient::Publisher)
-        .await
-        .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
-
-    let msg = Msg::Text(text);
+    let created_at = Utc::now();
 
     logging::log!(
-        "[msg] > on channel: {}:\n      > {} published: {:?}\n",
+        "[{}] > on channel: {}:\n                                 > {} published: {:?}\n",
+        &created_at,
         &room_uuid,
         &user.user_name,
-        &msg
+        &text
     );
 
-    let msg_data = MsgData::new(room_uuid.clone(), user, msg.clone());
+    let msg_data = MsgData::new(room_uuid.clone(), user.uuid, text, created_at);
 
-    match rooms_manager
-        .publish_msg(room_uuid, msg)
+    msg_data
+        .insert_into_db(&pool)
         .await
-        .map_err(|err| ServerFnError::new(format!("{:?}", err)))
-    {
-        Ok(_) => msg_data
-            .insert_into_db(&pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("{:?}", err))),
-        Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
+        .map_err(|err| ServerFnError::new(err))
+}
+
+#[server(FetchMsg, "/api", "GetJson")]
+async fn fetch_msg(room_uuid: String) -> Result<Vec<MsgResponse>, ServerFnError> {
+    use crate::models::message_model::MsgResponse;
+    use crate::state::pool;
+
+    let pool = pool()?;
+
+    let room_uuid = room_uuid
+        .strip_prefix("/channel/")
+        .ok_or_else(|| ServerFnError::new("Invalid path"))?
+        .to_string();
+
+    match MsgResponse::get_all_msg(&room_uuid, &pool).await {
+        Ok(mut vec_msg) => {
+            vec_msg.sort();
+            Ok(vec_msg)
+        }
+        Err(err) => Err(ServerFnError::new(err)),
     }
 }
 
@@ -79,6 +87,8 @@ pub fn Channel() -> impl IntoView {
     let path = leptos_router::use_location().pathname;
 
     let path_resource = create_resource(move || path.get(), validate_path);
+
+    let msg_resource = create_resource(move || path.get(), fetch_msg);
 
     view! {
         <Transition fallback=move || {
@@ -103,15 +113,63 @@ pub fn Channel() -> impl IntoView {
                             publish_msg.dispatch(PublishMsg { text, room_uuid });
                             message_ref.get().expect("input element doesn't exist").set_value("");
                         };
+
                         view! {
                             <div
-                                class="h-full bg-transparent grow flex flex-col"
+                                class="h-full w-full bg-transparent flex pt-2 flex-col overflow-y-hidden"
                                 id="chat-interface"
                             >
-                                <div class="grow bg-transparent px-4" id="chat-log"></div>
+                                <div
+                                    class="flex flex-col h-[44rem] w-full bg-transparent px-4 overflow-y-scroll"
+                                    id="chat-log"
+                                >
+                                    <For
+                                        {move || msg_resource.track()}
+                                        each=move || {
+                                            msg_resource
+                                                .get()
+                                                .unwrap_or_else(|| Ok(Vec::new()))
+                                                .unwrap_or_default()
+                                                .into_iter()
+                                                .enumerate()
+                                        }
+                                        key=|(_, msg_response)| (msg_response.created_at.clone(), msg_response.msg_uuid.clone())
+                                        children=move |(idx, _)| {
+                                            let msg = create_memo(move |_| {
+                                                msg_resource
+                                                    .and_then(|vec| vec.get(idx).unwrap().clone())
+                                                    .unwrap_or(Ok(MsgResponse::default()))
+                                                    .unwrap_or_default()
+                                            });
+
+                                            view! {
+                                                <div class="bg-transparent flex flex-row mt-2">
+                                                    <div class="flex flex-shrink-0 justify-center items-center pb-1 size-9 bg-sky-500 rounded-full text-white hover:text-black hover:bg-green-300 uppercase font-sans text-2xl text-center">
+                                                        {move || msg.get().msg_sender.unwrap().avatar.get_view()}
+                                                    </div>
+                                                    <div class="flex flex-col ml-2 rounded-md bg-slate-300 px-2">
+                                                        <div class="flex flex-row content-start">
+                                                            <p>
+                                                                <span class="font-sans text-indigo-500 text-lg">
+                                                                    {move || msg.get().msg_sender.unwrap().user_name}
+                                                                </span>
+                                                                <span class="font-sans text-black/[.65] text-xs ml-2">
+                                                                    {move || msg.get().created_at.with_timezone(&Local).format("%d/%m/%Y %H:%M").to_string()}
+                                                                </span>
+                                                            </p>
+                                                        </div>
+                                                        <p class="py-1 font-sans text-black text-wrap">
+                                                            {move || msg.get().message}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    />
+                                </div>
                                 <form
                                     on:submit=send
-                                    class="bg-transparent px-4 h-32 flex flex-row items-center"
+                                    class="px-4 h-32 flex flex-row items-center"
                                 >
                                     <input
                                         id="input"

@@ -12,7 +12,6 @@ mod joined_channels;
 mod login;
 mod logout;
 mod register;
-mod users_list;
 
 pub enum AppPath {
     Register,
@@ -46,10 +45,10 @@ impl leptos_router::ToHref for AppPath {
 }
 
 #[server(AuthenticateUser)]
-async fn authenticate_user() -> Result<(), ServerFnError> {
+async fn authenticate_user() -> Result<bool, ServerFnError> {
     use crate::{
         models::user_model::UserData,
-        state::ssr::{auth, pool},
+        state::{auth, pool},
     };
 
     let auth = auth()?;
@@ -64,9 +63,9 @@ async fn authenticate_user() -> Result<(), ServerFnError> {
             return Err(ServerFnError::new("Invalid user"));
         }
 
-        Ok(())
+        Ok(true)
     } else {
-        Err(ServerFnError::new("Auth session isn't authenticated!"))
+        Ok(false)
     }
 }
 
@@ -82,6 +81,8 @@ pub fn App() -> impl IntoView {
         |_| authenticate_user(),
     );
 
+    let (is_auth, set_is_auth) = create_signal(false);
+
     view! {
         <Stylesheet id="leptos" href="/pkg/hey-leptos.css"/>
         <Title text="HEY!"/>
@@ -96,15 +97,25 @@ pub fn App() -> impl IntoView {
                         path=AppPath::Home
                         view=move || view! {
                             <Transition fallback=|| view! { <p>"Loading..."</p> }>
-                                {move || auth_resource.map(|res| match res.clone() {
-                                    Ok(_) => view! { <Redirect path=AppPath::Channel(None)/> },
+                                {move || auth_resource.map(|res| match *res {
+                                    Ok(val) => {
+                                        if is_auth.get() != val {
+                                            set_is_auth.set(val);
+                                        }
+                                        match val {
+                                            true => view! { <Redirect path=AppPath::Channel(None)/> },
+                                            false => view! { <home::HomePage/> }
+                                        }
+                                    },
                                     Err(_) => view! { <home::HomePage/> }
                                 })}
                             </Transition>
                         }
                     />
-                    <Route
+                    <ProtectedRoute
                         path=AppPath::Channel(None)
+                        redirect_path=AppPath::Home
+                        condition=move || is_auth.get()
                         view=move || view! { <chat::ChatPage logout_action/> }
                     >
                         <Route path=":id" view=channel::Channel/>
@@ -113,7 +124,7 @@ pub fn App() -> impl IntoView {
                                 <p class="font-sans text-white text-center">"TODO: create a landing page"</p>
                             </div>
                         }/>
-                    </Route>
+                    </ProtectedRoute>
                     <Route path=AppPath::Register view=register::RegisterPage/>
                     <Route path=AppPath::Login view=move || view! { <login::LoginPage login_action/> }/>
                 </Routes>
