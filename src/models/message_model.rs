@@ -5,6 +5,18 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WsPayload {
+    pub op_code: u8,
+    pub message: String,
+}
+
+impl WsPayload {
+    pub fn new(op_code: u8, message: String) -> Self {
+        Self { op_code, message }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct MsgData {
     pub msg_uuid: String,

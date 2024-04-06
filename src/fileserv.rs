@@ -1,16 +1,24 @@
-use axum::{
-    body::Body,
-    extract::State,
-    response::IntoResponse,
-    http::{Request, Response, StatusCode, Uri},
+#[cfg(feature = "ssr")]
+use {
+    crate::app::App,
+    axum::response::Response as AxumResponse,
+    axum::{
+        body::Body,
+        extract::State,
+        http::{Request, Response, StatusCode, Uri},
+        response::IntoResponse,
+    },
+    leptos::*,
+    tower::ServiceExt,
+    tower_http::services::ServeDir,
 };
-use axum::response::Response as AxumResponse;
-use tower::ServiceExt;
-use tower_http::services::ServeDir;
-use leptos::*;
-use crate::app::App;
 
-pub async fn file_and_error_handler(uri: Uri, State(options): State<LeptosOptions>, req: Request<Body>) -> AxumResponse {
+#[cfg(feature = "ssr")]
+pub async fn file_and_error_handler(
+    uri: Uri,
+    State(options): State<LeptosOptions>,
+    req: Request<Body>,
+) -> AxumResponse {
     let root = options.site_root.clone();
     let res = get_static_file(uri.clone(), &root).await.unwrap();
 
@@ -22,10 +30,8 @@ pub async fn file_and_error_handler(uri: Uri, State(options): State<LeptosOption
     }
 }
 
-async fn get_static_file(
-    uri: Uri,
-    root: &str,
-) -> Result<Response<Body>, (StatusCode, String)> {
+#[cfg(feature = "ssr")]
+async fn get_static_file(uri: Uri, root: &str) -> Result<Response<Body>, (StatusCode, String)> {
     let req = Request::builder()
         .uri(uri.clone())
         .body(Body::empty())
