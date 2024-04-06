@@ -4,6 +4,7 @@ pub mod rooms_manager;
 
 #[cfg(feature = "ssr")]
 use {
+    self::rooms_manager::RoomsManager,
     auth::AuthSession,
     axum::extract::FromRef,
     db::Database,
@@ -17,6 +18,7 @@ pub struct AppState {
     pub pool: Database,
     pub leptos_options: LeptosOptions,
     pub routes: Vec<RouteListing>,
+    pub rooms_manager: RoomsManager,
 }
 
 #[cfg(feature = "ssr")]

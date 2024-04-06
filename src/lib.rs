@@ -1,7 +1,6 @@
-#[cfg(feature = "ssr")]
-pub mod fileserv;
-
 pub mod app;
+pub mod fileserv;
+pub mod messaging;
 pub mod models;
 pub mod state;
 

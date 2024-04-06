@@ -787,10 +787,6 @@ video {
   flex-direction: column;
 }
 
-.flex-col-reverse {
-  flex-direction: column-reverse;
-}
-
 .place-items-center {
   place-items: center;
 }
@@ -839,10 +835,6 @@ video {
 
 .text-ellipsis {
   text-overflow: ellipsis;
-}
-
-.text-wrap {
-  text-wrap: wrap;
 }
 
 .rounded-full {

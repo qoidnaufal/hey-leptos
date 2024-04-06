@@ -2,12 +2,16 @@ use super::{
     app_error::{AppError, ErrorTemplate},
     channel_header::ChannelHeader,
 };
-use crate::models::message_model::MsgResponse;
+use crate::{
+    models::message_model::{MsgResponse, WsPayload},
+    state::rooms_manager::Room,
+};
 use chrono::Local;
 use leptos::*;
+use leptos_use::{use_websocket, UseWebsocketReturn};
 
 #[server]
-async fn validate_path(path: String) -> Result<String, ServerFnError> {
+async fn validate_path(path: String) -> Result<Room, ServerFnError> {
     use crate::state::{auth, pool, rooms_manager::RoomsManager};
 
     let auth = auth()?;
@@ -22,14 +26,13 @@ async fn validate_path(path: String) -> Result<String, ServerFnError> {
     if path.starts_with("/channel/") {
         let room_uuid = path
             .strip_prefix("/channel/")
-            .expect("Valid uuid is needed")
-            .to_string();
+            .expect("Valid uuid is needed");
 
         RoomsManager::validate_uuid(room_uuid, &pool)
             .await
-            .map_err(|err| ServerFnError::new(format!("{:?}", err)))
+            .map_err(|err| ServerFnError::new(err))
     } else {
-        Ok(String::new())
+        Err(ServerFnError::new("Invalid path"))
     }
 }
 
@@ -79,7 +82,7 @@ async fn fetch_msg(room_uuid: String) -> Result<Vec<MsgResponse>, ServerFnError>
     match MsgResponse::get_all_msg(&room_uuid, &pool).await {
         Ok(mut vec_msg) => {
             vec_msg.sort();
-            vec_msg.reverse();
+            // vec_msg.reverse();
             Ok(vec_msg)
         }
         Err(err) => Err(ServerFnError::new(err)),
@@ -92,20 +95,27 @@ pub fn Channel() -> impl IntoView {
 
     let path_resource = create_resource(move || path.get(), validate_path);
 
-    let msg_resource = create_resource(move || path.get(), fetch_msg);
-
     view! {
         <Transition fallback=move || {
             view! { <p>"Loading..."</p> }
         }>
             {move || {
-                match path_resource.get().unwrap_or(Ok(String::new())) {
-                    Ok(channel_name) => {
+                match path_resource.get().unwrap_or(Err(ServerFnError::new("Invalid path"))) {
+                    Ok(room) => {
+                        let room_uuid = path.get();
+                        let room_uuid = room_uuid
+                            .strip_prefix("/channel/")
+                            .expect("Provide valid uuid!");
+                        let UseWebsocketReturn { open, close, send, message_bytes, .. } = use_websocket(&format!("ws://localhost:4321/ws/{}", room_uuid));
+
+                        let msg_resource = create_resource(move || path.get(), fetch_msg);
+
                         let message_ref = create_node_ref::<html::Div>();
                         let publish_msg = create_server_action::<PublishMsg>();
+
                         let manage_input = move |ev: ev::KeyboardEvent| {
                             ev.prevent_default();
-                            if !ev.shift_key() && ev.key() == "Enter" {
+                            if !ev.shift_key() && ev.key() == "Enter" && !message_ref.get().expect("").inner_text().trim().is_empty() {
                                 let path = path.get();
                                 let room_uuid = path
                                     .strip_prefix("/channel/")
@@ -114,20 +124,38 @@ pub fn Channel() -> impl IntoView {
                                 let text = message_ref
                                     .get()
                                     .expect("input element doesn't exist")
-                                    .inner_text();
+                                    .inner_text()
+                                    .trim()
+                                    .to_string();
+                                let ws_payload = WsPayload::new(1, "send".to_string());
                                 publish_msg.dispatch(PublishMsg { text, room_uuid });
+                                send(&serde_json::to_string(&ws_payload).unwrap());
                                 message_ref.get().expect("input element doesn't exist").set_inner_text("");
                             }
                         };
 
+                        create_effect(move |_| {
+                            if let Some(bytes) = message_bytes.get() {
+                                let msg = serde_json::from_slice::<WsPayload>(&bytes).unwrap();
+                                match msg.op_code {
+                                    10 => msg_resource.refetch(),
+                                    op => logging::log!("not yet registered op: {}", op)
+                                }
+                            }
+                        });
+
+                        on_cleanup(move || close());
+
                         view! {
                             <div
+                                on:load=move |_| open()
                                 class="h-full w-full bg-transparent flex pt flex-col overflow-y-hidden"
                                 id="chat-interface"
                             >
-                                <ChannelHeader channel_name/>
-                                <div
-                                    class="flex flex-col-reverse h-[44rem] w-full bg-transparent px-4 overflow-y-scroll"
+                                <ChannelHeader channel_name=room.room_name/>
+                                <ol
+                                    // flex flex-col-reverse following a reversed data-set
+                                    class="h-[44rem] w-full bg-transparent px-4 overflow-y-scroll"
                                     id="chat-log"
                                 >
                                     <For
@@ -150,7 +178,7 @@ pub fn Channel() -> impl IntoView {
                                             });
 
                                             view! {
-                                                <div class="bg-transparent flex flex-row mt-2">
+                                                <li class="bg-transparent flex flex-row mt-2">
                                                     <div class="flex flex-shrink-0 justify-center items-center pb-1 size-9 bg-sky-500 rounded-full text-white hover:text-black hover:bg-green-300 uppercase font-sans text-2xl text-center">
                                                         {move || msg.get().msg_sender.unwrap().avatar.get_view()}
                                                     </div>
@@ -165,15 +193,15 @@ pub fn Channel() -> impl IntoView {
                                                                 </span>
                                                             </p>
                                                         </div>
-                                                        <p class="py-1 font-sans text-black text-wrap">
+                                                        <pre class="py-1 font-sans text-black">
                                                             {move || msg.get().message}
-                                                        </p>
+                                                        </pre>
                                                     </div>
-                                                </div>
+                                                </li>
                                             }
                                         }
                                     />
-                                </div>
+                                </ol>
                                 <form
                                     class="px-4 h-32 flex flex-row items-center"
                                 >
@@ -183,9 +211,8 @@ pub fn Channel() -> impl IntoView {
                                         role="textbox"
                                         aria-multiline="true"
                                         contenteditable="true"
-                                        name="message"
                                         _ref=message_ref
-                                        aria-label="Type your message..."
+                                        aria-placeholder="Type your message..."
                                         class="grow rounded-md min-h-12 max-h-[120px] h-fit overflow-y-scroll text-white font-sans mb-2 px-2 py-1 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto text-base"
                                     ></div>
                                 </form>

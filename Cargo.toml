@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-axum = { version = "0.7", features = ["macros", "tokio", "json"], optional = true }
+axum = { version = "0.7", features = ["macros", "ws", "json"], optional = true }
 console_error_panic_hook = "0.1"
 leptos = { version = "0.6", features = ["nightly"] }
 leptos_axum = { version = "0.6", optional = true }
@@ -36,6 +36,8 @@ leptos-use = { version = "0.10.2", features = ["serde"] }
 futures = "0.3.30"
 tokio-stream = "0.1.14"
 chrono = { version = "0.4.37", features = ["serde", "alloc"] }
+# web-sys = { version = "0.3.69", features = ["Element"] }
+# wasm-bindgen = "=0.2.92"
 
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]

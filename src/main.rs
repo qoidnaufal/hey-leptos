@@ -11,9 +11,9 @@ use {
     axum_session::{SessionConfig, SessionLayer, SessionStore},
     axum_session_auth::{AuthConfig, AuthSessionLayer, SessionSurrealPool},
     hey_leptos::{
-        app, fileserv,
+        app, fileserv, messaging,
         models::user_model,
-        state::{self, auth, db},
+        state::{self, auth, db, rooms_manager},
     },
     leptos::*,
     leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes},
@@ -61,6 +61,8 @@ async fn main() -> std::io::Result<()> {
         .await
         .map_err(|err| std::io::Error::other(err))?;
 
+    let rooms_manager = rooms_manager::RoomsManager::default();
+
     let conf = get_configuration(None)
         .await
         .map_err(|err| std::io::Error::other(err))?;
@@ -84,10 +86,12 @@ async fn main() -> std::io::Result<()> {
         pool: pool.clone(),
         leptos_options: leptos_options.clone(),
         routes: app_routes.clone(),
+        rooms_manager: rooms_manager.clone(),
     };
 
     // Router
     let router = Router::new()
+        .route("/ws/:id", get(messaging::ws_handler))
         .route(
             "/api/*fn_name",
             get(server_fn_handler).post(server_fn_handler),
@@ -106,7 +110,7 @@ async fn main() -> std::io::Result<()> {
         .layer(SessionLayer::new(session_store))
         .with_state(app_state);
 
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
     logging::log!("listening on http://{}", &addr);
     axum::serve(listener, router.into_make_service()).await?;
 
