@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use leptos::*;
 use serde::{Deserialize, Serialize};
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Avatar {
@@ -40,11 +41,17 @@ pub struct UserData {
 
 // ---- user to expose to the client
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, Hash, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, Default)]
 pub struct User {
     pub uuid: String,
     pub user_name: String,
     pub avatar: Avatar,
+}
+
+impl Hash for User {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.uuid.hash(state);
+    }
 }
 
 impl PartialEq for User {

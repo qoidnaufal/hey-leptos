@@ -1,14 +1,16 @@
-use super::{
-    app_error::{AppError, ErrorTemplate},
-    channel_header::ChannelHeader,
+use {
+    super::{
+        app_error::{AppError, ErrorTemplate},
+        channel_header::ChannelHeader,
+    },
+    crate::{
+        models::message_model::{MsgResponse, WsPayload},
+        state::rooms_manager::Room,
+    },
+    chrono::Local,
+    leptos::*,
+    leptos_use::{use_websocket, UseWebsocketReturn},
 };
-use crate::{
-    models::message_model::{MsgResponse, WsPayload},
-    state::rooms_manager::Room,
-};
-use chrono::Local;
-use leptos::*;
-use leptos_use::{use_websocket, UseWebsocketReturn};
 
 #[server]
 async fn validate_path(path: String) -> Result<Room, ServerFnError> {
@@ -91,9 +93,13 @@ async fn fetch_msg(room_uuid: String) -> Result<Vec<MsgResponse>, ServerFnError>
 
 #[component]
 pub fn Channel() -> impl IntoView {
+    // let (chat_log, set_chat_log) = create_signal(Vec::<MsgResponse>::new());
+
     let path = leptos_router::use_location().pathname;
 
     let path_resource = create_resource(move || path.get(), validate_path);
+
+    // let fetch_action = create_server_action::<FetchMsg>();
 
     view! {
         <Transition fallback=move || {
@@ -106,31 +112,33 @@ pub fn Channel() -> impl IntoView {
                         let room_uuid = room_uuid
                             .strip_prefix("/channel/")
                             .expect("Provide valid uuid!");
+
                         let UseWebsocketReturn { open, close, send, message_bytes, .. } = use_websocket(&format!("ws://localhost:4321/ws/{}", room_uuid));
 
                         let msg_resource = create_resource(move || path.get(), fetch_msg);
 
-                        let message_ref = create_node_ref::<html::Div>();
+                        let message_input = create_node_ref::<html::Div>();
+
                         let publish_msg = create_server_action::<PublishMsg>();
 
                         let manage_input = move |ev: ev::KeyboardEvent| {
                             ev.prevent_default();
-                            if !ev.shift_key() && ev.key() == "Enter" && !message_ref.get().expect("").inner_text().trim().is_empty() {
+                            if !ev.shift_key() && ev.key() == "Enter" && !message_input.get().expect("").inner_text().trim().is_empty() {
                                 let path = path.get();
                                 let room_uuid = path
                                     .strip_prefix("/channel/")
                                     .expect("Provide valid uuid!")
                                     .to_string();
-                                let text = message_ref
+                                let text = message_input
                                     .get()
                                     .expect("input element doesn't exist")
                                     .inner_text()
                                     .trim()
                                     .to_string();
-                                let ws_payload = WsPayload::new(1, "send".to_string());
+                                let ws_payload = WsPayload::new(1, "new message".to_string()); // perhaps need to add last seen message too
                                 publish_msg.dispatch(PublishMsg { text, room_uuid });
                                 send(&serde_json::to_string(&ws_payload).unwrap());
-                                message_ref.get().expect("input element doesn't exist").set_inner_text("");
+                                message_input.get().expect("input element doesn't exist").set_inner_text("");
                             }
                         };
 
@@ -138,13 +146,27 @@ pub fn Channel() -> impl IntoView {
                             if let Some(bytes) = message_bytes.get() {
                                 let msg = serde_json::from_slice::<WsPayload>(&bytes).unwrap();
                                 match msg.op_code {
-                                    10 => msg_resource.refetch(),
-                                    op => logging::log!("not yet registered op: {}", op)
+                                    11 =>  msg_resource.refetch(),
+                                     n => logging::log!("not yet registered op_code: {}", n)
                                 }
                             }
                         });
 
-                        on_cleanup(move || close());
+                        let focusin_handler = move |_: ev::FocusEvent| {
+                            if let Some(node) = message_input.get() {
+                                node.set_inner_text("");
+                            }
+                        };
+
+                        let focusout_handler = move |_: ev::FocusEvent| {
+                            if let Some(node) = message_input.get() {
+                                node.set_inner_text("Type your message...");
+                            }
+                        };
+
+                        let _root = create_node_ref::<html::Ol>();
+
+                        on_cleanup(close);
 
                         view! {
                             <div
@@ -157,6 +179,7 @@ pub fn Channel() -> impl IntoView {
                                     // flex flex-col-reverse following a reversed data-set
                                     class="h-[44rem] w-full bg-transparent px-4 overflow-y-scroll"
                                     id="chat-log"
+                                    _ref=_root
                                 >
                                     <For
                                         {move || msg_resource.track()}
@@ -168,7 +191,7 @@ pub fn Channel() -> impl IntoView {
                                                 .into_iter()
                                                 .enumerate()
                                         }
-                                        key=|(_, msg_response)| (msg_response.created_at.clone(), msg_response.msg_uuid.clone())
+                                        key=|(_, msg_response)| (msg_response.created_at, msg_response.msg_uuid.clone())
                                         children=move |(idx, _)| {
                                             let msg = create_memo(move |_| {
                                                 msg_resource
@@ -178,7 +201,7 @@ pub fn Channel() -> impl IntoView {
                                             });
 
                                             view! {
-                                                <li class="bg-transparent flex flex-row mt-2">
+                                                <li class="bg-transparent flex flex-row mt-2" /*_ref=chat_msg*/>
                                                     <div class="flex flex-shrink-0 justify-center items-center pb-1 size-9 bg-sky-500 rounded-full text-white hover:text-black hover:bg-green-300 uppercase font-sans text-2xl text-center">
                                                         {move || msg.get().msg_sender.unwrap().avatar.get_view()}
                                                     </div>
@@ -207,14 +230,15 @@ pub fn Channel() -> impl IntoView {
                                 >
                                     <div
                                         on:keyup=manage_input
+                                        on:focusin=focusin_handler
+                                        on:focusout=focusout_handler
                                         id="input"
                                         role="textbox"
                                         aria-multiline="true"
                                         contenteditable="true"
-                                        _ref=message_ref
-                                        aria-placeholder="Type your message..."
-                                        class="grow rounded-md min-h-12 max-h-[120px] h-fit overflow-y-scroll text-white font-sans mb-2 px-2 py-1 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto text-base"
-                                    ></div>
+                                        _ref=message_input
+                                        class="grow rounded-md min-h-12 max-h-[120px] h-fit overflow-y-scroll text-white font-sans mb-2 px-2 py-3 bg-white/20 hover:bg-white/10 focus:bg-white/10 focus:outline-none border-0 w-auto text-base flex items-center"
+                                    >"Type your message..."</div>
                                 </form>
                             </div>
                         }

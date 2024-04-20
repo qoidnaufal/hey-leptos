@@ -104,9 +104,37 @@ impl MsgResponse {
     ) -> Result<Vec<Self>, surrealdb::Error> {
         match pool
             .client
-            .query("SELECT * FROM type::table($table) WHERE channel = $channel")
-            .bind(("table", "message"))
+            .query("SELECT * FROM message WHERE channel = $channel")
             .bind(("channel", room_uuid))
+            .await
+        {
+            Ok(mut query_result) => {
+                let response = query_result.take::<Vec<MsgData>>(0);
+                let result = if let Ok(vec_msg) = response {
+                    let future_vec = vec_msg
+                        .iter()
+                        .map(|msg| async { Self::from_msg_data(msg, &pool).await });
+                    join_all(future_vec).await
+                } else {
+                    Vec::new()
+                };
+
+                Ok(result)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    pub async fn get_limited_msg(
+        room_uuid: &str,
+        pool: &Database,
+        start: u32,
+    ) -> Result<Vec<Self>, surrealdb::Error> {
+        match pool
+            .client
+            .query("SELECT * FROM message WHERE channel = $channel LIMIT 10 START $start")
+            .bind(("channel", room_uuid))
+            .bind(("start", start))
             .await
         {
             Ok(mut query_result) => {

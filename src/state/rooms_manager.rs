@@ -4,6 +4,7 @@ use {
     serde::{Deserialize, Serialize},
     std::collections::HashMap,
     thiserror::Error,
+    uuid::Uuid,
 };
 
 #[derive(Debug, Error)]
@@ -11,7 +12,7 @@ pub enum RoomsManagerError {
     #[error("Room Does Not Exist")]
     RoomDoesNotExist,
     #[cfg(feature = "ssr")]
-    #[error("Room Creation Failed")]
+    #[error("Room Creation Failed: {0}")]
     FromDbError(#[from] surrealdb::Error),
     #[error("User Already Inside")]
     UserAlreadyInside,
@@ -29,23 +30,8 @@ pub struct Room {
     pub created_at: DateTime<Utc>,
 }
 
-#[cfg(feature = "ssr")]
-use {
-    crate::{models::message_model::WsPayload, state::db::Database},
-    std::sync::{Arc, RwLock},
-    tokio::sync::mpsc,
-    uuid::Uuid,
-};
-
-#[cfg(feature = "ssr")]
-#[derive(Debug, Clone, Default)]
-pub struct RoomsManager {
-    pub users: Arc<RwLock<HashMap<String, Option<mpsc::UnboundedSender<WsPayload>>>>>,
-}
-
-#[cfg(feature = "ssr")]
 impl Room {
-    fn new(room_name: String, created_at: DateTime<Utc>) -> Self {
+    pub fn new(room_name: String, created_at: DateTime<Utc>) -> Self {
         let room_uuid = Uuid::new_v4().as_simple().to_string();
         let users = HashMap::<String, User>::new();
 
@@ -57,7 +43,7 @@ impl Room {
         }
     }
 
-    fn insert_user(&mut self, user: User) -> Result<(), RoomsManagerError> {
+    pub fn insert_user(&mut self, user: User) -> Result<(), RoomsManagerError> {
         if !self.users.contains_key(&user.uuid) {
             self.users.insert(user.uuid.clone(), user);
             Ok(())
@@ -66,7 +52,7 @@ impl Room {
         }
     }
 
-    fn remove_user(&mut self, user: User) -> Result<(), RoomsManagerError> {
+    pub fn remove_user(&mut self, user: User) -> Result<(), RoomsManagerError> {
         if self.users.contains_key(&user.uuid) {
             self.users.retain(|k, _| *k != user.uuid);
             Ok(())
@@ -74,6 +60,22 @@ impl Room {
             Err(RoomsManagerError::UserDoesNotExist)
         }
     }
+}
+
+#[cfg(feature = "ssr")]
+use {
+    crate::{models::message_model::WsPayload, state::db::Database},
+    std::sync::{Arc, RwLock},
+    tokio::sync::mpsc,
+};
+
+#[cfg(feature = "ssr")]
+type ChannelUsers = Arc<RwLock<HashMap<String, Option<mpsc::UnboundedSender<WsPayload>>>>>;
+
+#[cfg(feature = "ssr")]
+#[derive(Debug, Clone, Default)]
+pub struct RoomsManager {
+    pub channels: Arc<RwLock<HashMap<String, ChannelUsers>>>,
 }
 
 #[cfg(feature = "ssr")]

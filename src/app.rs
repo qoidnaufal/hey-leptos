@@ -92,7 +92,7 @@ pub fn App() -> impl IntoView {
             outside_errors.insert_with_default_key(app_error::AppError::NotFound);
             view! { <app_error::ErrorTemplate outside_errors/> }.into_view()
         }>
-            <main class="grid h-screen place-items-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
+            <main class="absolute size-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
                 <Routes>
                     <Route
                         path=AppPath::Home
@@ -121,7 +121,7 @@ pub fn App() -> impl IntoView {
                     >
                         <Route path=":id" view=channel::Channel/>
                         <Route path="" view=|| view! {
-                            <div class="h-full bg-transparent grow flex items-center justify-center">
+                            <div class="h-full grow flex items-center justify-center">
                                 <p class="font-sans text-white text-center">"TODO: create a landing page"</p>
                             </div>
                         }/>
