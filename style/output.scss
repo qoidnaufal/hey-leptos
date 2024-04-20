@@ -756,6 +756,10 @@ video {
   width: 100%;
 }
 
+.max-w-\[500px\] {
+  max-width: 500px;
+}
+
 .max-w-\[91\.6667\%\] {
   max-width: 91.6667%;
 }
@@ -791,6 +795,10 @@ video {
   flex-direction: row;
 }
 
+.flex-row-reverse {
+  flex-direction: row-reverse;
+}
+
 .flex-col {
   flex-direction: column;
 }
@@ -809,6 +817,10 @@ video {
 
 .items-center {
   align-items: center;
+}
+
+.justify-end {
+  justify-content: flex-end;
 }
 
 .justify-center {
@@ -847,6 +859,10 @@ video {
 
 .text-ellipsis {
   text-overflow: ellipsis;
+}
+
+.text-wrap {
+  text-wrap: wrap;
 }
 
 .rounded-full {
