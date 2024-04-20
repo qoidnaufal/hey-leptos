@@ -4,7 +4,7 @@ use leptos_router::A;
 #[component]
 pub fn HomePage() -> impl IntoView {
     view! {
-        <div class="flex flex-col space-y-3 bg-transparent">
+        <div class="items-center justify-center h-full flex flex-col flex-wrap space-y-3">
             <p class="font-sans text-center text-[160px] text-black">"Welcome to HEY!"</p>
             <div class="flex flex-row justify-center space-x-7 bg-transparent">
                 <A

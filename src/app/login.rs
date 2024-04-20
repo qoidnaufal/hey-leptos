@@ -51,7 +51,7 @@ pub fn LoginPage(login_action: LoginAction) -> impl IntoView {
     view! {
         <div
             id="loginpage"
-            class="flex flex-col bg-slate-800/[.65] py-2.5 px-8 rounded-xl size-[27rem]"
+            class="block absolute m-auto left-0 right-0 top-0 bottom-0 flex flex-col bg-slate-800/[.65] py-2.5 px-8 rounded-xl size-[27rem]"
         >
             <h1 class="mt-5 text-white text-center text-xl">"Login"</h1>
             <ActionForm

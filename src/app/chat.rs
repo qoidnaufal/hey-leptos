@@ -30,7 +30,7 @@ pub fn ChatPage(logout_action: LogoutAction) -> impl IntoView {
     );
 
     view! {
-        <div class="size-11/12 flex flex-row mx-4 my-4 bg-slate-800/[.65] rounded-xl">
+        <div class="block absolute m-auto left-0 right-0 top-0 bottom-0 w-[91.6667%] h-[91.6667%] max-h-[91.6667%] max-w-[91.6667%] flex flex-row bg-slate-800/[.65] rounded-xl">
             <div
                 id="outer-navigation-container"
                 class="flex flex-col w-[370px] h-full rounded-l-xl bg-transparent"

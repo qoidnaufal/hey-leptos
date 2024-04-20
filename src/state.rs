@@ -13,7 +13,7 @@ use {
 };
 
 #[cfg(feature = "ssr")]
-#[derive(Clone, FromRef, Debug)]
+#[derive(Clone, Debug, FromRef)]
 pub struct AppState {
     pub pool: Database,
     pub leptos_options: LeptosOptions,
