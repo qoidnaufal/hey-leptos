@@ -1,6 +1,6 @@
 use super::{
     create_or_join::{CreateNewRoom, CreateOrJoinRoomButton, JoinRoom, PopUpRoomForm},
-    current_user::{CurrentUser, UserMenu},
+    current_user::{get_avatar_and_name, CurrentUser, UserMenu},
     joined_channels::{fetch_joined_channels, JoinedChannels},
     logout::LogoutAction,
 };
@@ -29,6 +29,10 @@ pub fn ChatPage(logout_action: LogoutAction) -> impl IntoView {
         |_| fetch_joined_channels(),
     );
 
+    let user_resource = create_resource(|| (), |_| get_avatar_and_name());
+
+    provide_context(user_resource);
+
     view! {
         <div class="block absolute m-auto left-0 right-0 top-0 bottom-0 w-[91.6667%] h-[91.6667%] max-h-[91.6667%] max-w-[91.6667%] flex flex-row bg-slate-800/[.65] rounded-xl">
             <div
@@ -39,7 +43,7 @@ pub fn ChatPage(logout_action: LogoutAction) -> impl IntoView {
                     id="current-user-container"
                     class="h-[50px] w-full rounded-tl-xl bg-transparent"
                 >
-                    <CurrentUser display_user_menu set_display_user_menu/>
+                    <CurrentUser display_user_menu set_display_user_menu user_resource/>
                     <UserMenu display_user_menu/>
                 </div>
                 <div

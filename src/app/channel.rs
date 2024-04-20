@@ -4,7 +4,10 @@ use {
         channel_header::ChannelHeader,
     },
     crate::{
-        models::message_model::{MsgResponse, WsPayload},
+        models::{
+            message_model::{MsgResponse, WsPayload},
+            user_model::User,
+        },
         state::rooms_manager::Room,
     },
     chrono::Local,
@@ -93,13 +96,11 @@ async fn fetch_msg(room_uuid: String) -> Result<Vec<MsgResponse>, ServerFnError>
 
 #[component]
 pub fn Channel() -> impl IntoView {
-    // let (chat_log, set_chat_log) = create_signal(Vec::<MsgResponse>::new());
-
     let path = leptos_router::use_location().pathname;
 
     let path_resource = create_resource(move || path.get(), validate_path);
 
-    // let fetch_action = create_server_action::<FetchMsg>();
+    let user_resource = expect_context::<Resource<(), Result<User, ServerFnError>>>();
 
     view! {
         <Transition fallback=move || {
@@ -121,7 +122,7 @@ pub fn Channel() -> impl IntoView {
 
                         let publish_msg = create_server_action::<PublishMsg>();
 
-                        let manage_input = move |ev: ev::KeyboardEvent| {
+                        let handle_keyup = move |ev: ev::KeyboardEvent| {
                             ev.prevent_default();
                             if !ev.shift_key() && ev.key() == "Enter" && !message_input.get().expect("").inner_text().trim().is_empty() {
                                 let path = path.get();
@@ -135,7 +136,7 @@ pub fn Channel() -> impl IntoView {
                                     .inner_text()
                                     .trim()
                                     .to_string();
-                                let ws_payload = WsPayload::new(1, "new message".to_string()); // perhaps need to add last seen message too
+                                let ws_payload = WsPayload::new(1, "new message".to_string());
                                 publish_msg.dispatch(PublishMsg { text, room_uuid });
                                 send(&serde_json::to_string(&ws_payload).unwrap());
                                 message_input.get().expect("input element doesn't exist").set_inner_text("");
@@ -152,13 +153,13 @@ pub fn Channel() -> impl IntoView {
                             }
                         });
 
-                        let focusin_handler = move |_: ev::FocusEvent| {
+                        let handle_focusin = move |_: ev::FocusEvent| {
                             if let Some(node) = message_input.get() {
                                 node.set_inner_text("");
                             }
                         };
 
-                        let focusout_handler = move |_: ev::FocusEvent| {
+                        let handle_focusout = move |_: ev::FocusEvent| {
                             if let Some(node) = message_input.get() {
                                 node.set_inner_text("Type your message...");
                             }
@@ -176,8 +177,7 @@ pub fn Channel() -> impl IntoView {
                             >
                                 <ChannelHeader channel_name=room.room_name/>
                                 <ol
-                                    // flex flex-col-reverse following a reversed data-set
-                                    class="h-[44rem] w-full bg-transparent px-4 overflow-y-scroll"
+                                    class="flex flex-col-reverse h-[44rem] w-full bg-transparent px-4 overflow-y-scroll"
                                     id="chat-log"
                                     _ref=_root
                                 >
@@ -195,33 +195,15 @@ pub fn Channel() -> impl IntoView {
                                         children=move |(idx, _)| {
                                             let msg = create_memo(move |_| {
                                                 msg_resource
-                                                    .and_then(|vec| vec.get(idx).unwrap().clone())
+                                                    .and_then(|vec| {
+                                                        let len = vec.len() - 1;
+                                                        vec.get(len-idx).unwrap().clone()
+                                                    })
                                                     .unwrap_or(Ok(MsgResponse::default()))
                                                     .unwrap_or_default()
                                             });
 
-                                            view! {
-                                                <li class="bg-transparent flex flex-row mt-2" /*_ref=chat_msg*/>
-                                                    <div class="flex flex-shrink-0 justify-center items-center pb-1 size-9 bg-sky-500 rounded-full text-white hover:text-black hover:bg-green-300 uppercase font-sans text-2xl text-center">
-                                                        {move || msg.get().msg_sender.unwrap().avatar.get_view()}
-                                                    </div>
-                                                    <div class="flex flex-col ml-2 rounded-md bg-slate-300 px-2">
-                                                        <div class="flex flex-row content-start">
-                                                            <p>
-                                                                <span class="font-sans text-indigo-500 text-lg">
-                                                                    {move || msg.get().msg_sender.unwrap().user_name}
-                                                                </span>
-                                                                <span class="font-sans text-black/[.65] text-xs ml-2">
-                                                                    {move || msg.get().created_at.with_timezone(&Local).format("%d/%m/%Y %H:%M").to_string()}
-                                                                </span>
-                                                            </p>
-                                                        </div>
-                                                        <pre class="py-1 font-sans text-black">
-                                                            {move || msg.get().message}
-                                                        </pre>
-                                                    </div>
-                                                </li>
-                                            }
+                                            view! { <MessageBubble msg user_resource/> }
                                         }
                                     />
                                 </ol>
@@ -229,9 +211,9 @@ pub fn Channel() -> impl IntoView {
                                     class="px-4 h-32 flex flex-row items-center"
                                 >
                                     <div
-                                        on:keyup=manage_input
-                                        on:focusin=focusin_handler
-                                        on:focusout=focusout_handler
+                                        on:keyup=handle_keyup
+                                        on:focusin=handle_focusin
+                                        on:focusout=handle_focusout
                                         id="input"
                                         role="textbox"
                                         aria-multiline="true"
@@ -257,5 +239,59 @@ pub fn Channel() -> impl IntoView {
             }}
 
         </Transition>
+    }
+}
+
+#[component]
+fn MessageBubble(
+    msg: Memo<MsgResponse>,
+    user_resource: Resource<(), Result<User, ServerFnError>>,
+) -> impl IntoView {
+    let sender = move || {
+        msg.get().msg_sender.unwrap().user_name
+            == user_resource
+                .map(|user| user.clone().unwrap_or_default().user_name)
+                .unwrap_or_default()
+    };
+
+    let receiver_class = "bg-transparent flex flex-row mt-2";
+    let sender_class = "bg-transparent flex flex-row-reverse mt-2";
+
+    view! {
+        <li class=move || if sender() { sender_class } else { receiver_class }>
+            <div class="flex flex-shrink-0 justify-center items-center pb-1 size-9 bg-sky-500 rounded-full text-white hover:text-black hover:bg-green-300 uppercase font-sans text-2xl text-center">
+                {move || msg.get().msg_sender.unwrap().avatar.get_view()}
+            </div>
+            <div class=move || if sender() { "flex flex-col mr-2 rounded-md bg-green-300 px-2 max-w-[500px]" } else { "flex flex-col ml-2 rounded-md bg-slate-300 px-2 max-w-[500px]" }>
+                <div class=move || if sender() { "flex flex-row flex-wrap justify-end" } else { "flex flex-row content-start" }>
+                    {move || if sender() {
+                        view! {
+                            <p class="text-right">
+                                <span class="font-sans text-black/[.65] text-xs mr-2">
+                                    {move || msg.get().created_at.with_timezone(&Local).format("%d/%m/%Y %H:%M").to_string()}
+                                </span>
+                                <span class="font-sans text-indigo-500 text-lg">
+                                    {move || msg.get().msg_sender.unwrap().user_name}
+                                </span>
+                            </p>
+                        }
+                    } else {
+                        view! {
+                            <p>
+                                <span class="font-sans text-indigo-500 text-lg">
+                                    {move || msg.get().msg_sender.unwrap().user_name}
+                                </span>
+                                <span class="font-sans text-black/[.65] text-xs ml-2">
+                                    {move || msg.get().created_at.with_timezone(&Local).format("%d/%m/%Y %H:%M").to_string()}
+                                </span>
+                            </p>
+                        }
+                    }}
+                </div>
+                <pre class=move || if sender() { "py-1 font-sans text-black text-right text-wrap" } else { "py-1 font-sans text-black text-wrap" }>
+                    {move || msg.get().message}
+                </pre>
+            </div>
+        </li>
     }
 }

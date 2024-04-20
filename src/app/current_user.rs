@@ -22,6 +22,7 @@ pub async fn get_avatar_and_name() -> Result<User, ServerFnError> {
 pub fn CurrentUser(
     display_user_menu: ReadSignal<bool>,
     set_display_user_menu: WriteSignal<bool>,
+    user_resource: Resource<(), Result<User, ServerFnError>>,
 ) -> impl IntoView {
     let toggle_user_menu = move |_| {
         if !display_user_menu.get() {
@@ -31,7 +32,7 @@ pub fn CurrentUser(
         }
     };
 
-    let user_resource = create_resource(|| (), |_| get_avatar_and_name());
+    // let user_resource = create_resource(|| (), |_| get_avatar_and_name());
 
     view! {
         <div class="select-none bg-slate-900/[.65] w-auto h-[50px] flex flex-row pl-2 items-center rounded-tl-xl">
