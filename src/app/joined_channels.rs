@@ -22,35 +22,30 @@ impl JoinedChannel {
 #[server(FetchJoinedChannels, "/api", "GetJson")]
 pub async fn fetch_joined_channels() -> Result<Vec<JoinedChannel>, ServerFnError> {
     use crate::{
+        error::ApiError,
         models::user_model::UserData,
-        state::{
-            auth, pool,
-            rooms_manager::{RoomsManager, RoomsManagerError},
-        },
+        state::{auth, pool, rooms_manager},
     };
     use futures::future::join_all;
 
     let auth = auth()?;
     let pool = pool()?;
-
+    let rooms_manager = rooms_manager()?;
     let current_user = auth
         .current_user
         .ok_or_else(|| ServerFnError::new("There is no current user!"))?;
-
     let user_data = UserData::get_from_uuid(&current_user.uuid, &pool)
         .await
         .ok_or_else(|| ServerFnError::new("Invalid user: Entry not found in db"))?;
-
     let joined_channels = user_data
         .joined_channels
         .iter()
         .map(|room_uuid| async {
-            let room_name = RoomsManager::get_room_name(room_uuid, &pool).await?;
-            Ok::<JoinedChannel, RoomsManagerError>(JoinedChannel::new(room_uuid.clone(), room_name))
+            let room_name = rooms_manager.get_room_name(room_uuid, &pool).await?;
+            Ok::<JoinedChannel, ApiError>(JoinedChannel::new(room_uuid.clone(), room_name))
         })
         .map(|res| async { res.await.unwrap_or_default() });
     let joined_channels = join_all(joined_channels).await;
-
     Ok(joined_channels)
 }
 

@@ -6,12 +6,13 @@ pub async fn create_new_room(room_name: String) -> Result<(), ServerFnError> {
     use super::AppPath;
     use crate::{
         models::user_model::UserData,
-        state::{auth, pool, rooms_manager::RoomsManager},
+        state::{auth, pool, rooms_manager},
     };
     use chrono::Utc;
 
     let auth = auth()?;
     let pool = pool()?;
+    let rooms_manager = rooms_manager()?;
 
     let user = auth
         .current_user
@@ -22,7 +23,10 @@ pub async fn create_new_room(room_name: String) -> Result<(), ServerFnError> {
 
     let created_at = Utc::now();
 
-    match RoomsManager::new_room(room_name.clone(), user, &pool, created_at).await {
+    match rooms_manager
+        .new_room(room_name.clone(), user, &pool, created_at)
+        .await
+    {
         Ok(room_uuid) => {
             user_data
                 .add_channel(room_uuid.clone(), &pool)
@@ -42,11 +46,12 @@ pub async fn join_room(room_uuid: String) -> Result<(), ServerFnError> {
     use super::AppPath;
     use crate::{
         models::user_model::UserData,
-        state::{auth, pool, rooms_manager::RoomsManager},
+        state::{auth, pool, rooms_manager},
     };
 
     let auth = auth()?;
     let pool = pool()?;
+    let rooms_manager = rooms_manager()?;
 
     let user = auth
         .current_user
@@ -61,7 +66,7 @@ pub async fn join_room(room_uuid: String) -> Result<(), ServerFnError> {
         .await
         .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
 
-    match RoomsManager::join_room(&room_uuid, user, &pool).await {
+    match rooms_manager.join_room(&room_uuid, user, &pool).await {
         Ok(_) => Ok(leptos_axum::redirect(
             &AppPath::Channel(Some(room_uuid)).to_string(),
         )),

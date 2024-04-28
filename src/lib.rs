@@ -1,4 +1,5 @@
 pub mod app;
+pub mod error;
 pub mod fileserv;
 pub mod messaging;
 pub mod models;

@@ -1,3 +1,5 @@
+use crate::error::AppError;
+
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
@@ -54,16 +56,13 @@ async fn authenticate_user() -> Result<bool, ServerFnError> {
 
     let auth = auth()?;
     let pool = pool()?;
-
     if auth.is_authenticated() {
         let user = auth
             .current_user
             .ok_or_else(|| ServerFnError::new("There is no current user!"))?;
-
         if UserData::get_from_uuid(&user.uuid, &pool).await.is_none() {
             return Err(ServerFnError::new("Invalid user"));
         }
-
         Ok(true)
     } else {
         Ok(false)
@@ -73,15 +72,12 @@ async fn authenticate_user() -> Result<bool, ServerFnError> {
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
-
     let login_action = create_server_action::<login::UserLogin>();
     let logout_action = create_server_action::<logout::UserLogout>();
-
     let auth_resource = create_resource(
         move || (login_action.version().get(), logout_action.version().get()),
         |_| authenticate_user(),
     );
-
     let (is_auth, set_is_auth) = create_signal(false);
 
     view! {
@@ -89,7 +85,7 @@ pub fn App() -> impl IntoView {
         <Title text="HEY!"/>
         <Router fallback=|| {
             let mut outside_errors = Errors::default();
-            outside_errors.insert_with_default_key(app_error::AppError::NotFound);
+            outside_errors.insert_with_default_key(AppError::NotFound);
             view! { <app_error::ErrorTemplate outside_errors/> }.into_view()
         }>
             <main class="absolute size-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">

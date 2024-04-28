@@ -30,6 +30,7 @@ async fn server_fn_handler(
         move || {
             provide_context(auth_session.clone());
             provide_context(app_state.pool.clone());
+            provide_context(app_state.rooms_manager.clone());
         },
         request,
     )
@@ -48,6 +49,7 @@ async fn leptos_routes_handler(
         move || {
             provide_context(auth_session.clone());
             provide_context(app_state.pool.clone());
+            provide_context(app_state.rooms_manager.clone());
         },
         app::App,
     );
@@ -60,18 +62,15 @@ async fn main() -> std::io::Result<()> {
     let pool = db::Database::init()
         .await
         .map_err(|err| std::io::Error::other(err))?;
-
     let rooms_manager = rooms_manager::RoomsManager::default();
-
     let conf = get_configuration(None)
         .await
         .map_err(|err| std::io::Error::other(err))?;
-
     let leptos_options = conf.leptos_options;
     let addr = leptos_options.site_addr;
     let app_routes = generate_route_list(app::App);
 
-    // Auth section
+    // --- Auth
     let session_config = SessionConfig::default().with_table_name("user_sessions");
     let auth_config = AuthConfig::<String>::default();
     let session_store = SessionStore::<SessionSurrealPool<SurrealClient>>::new(
@@ -81,7 +80,7 @@ async fn main() -> std::io::Result<()> {
     .await
     .map_err(|err| std::io::Error::other(err))?;
 
-    // AppState
+    // --- AppState
     let app_state = state::AppState {
         pool: pool.clone(),
         leptos_options: leptos_options.clone(),
@@ -89,9 +88,10 @@ async fn main() -> std::io::Result<()> {
         rooms_manager: rooms_manager.clone(),
     };
 
-    // Router
+    // --- Router
     let router = Router::new()
-        .route("/ws/:id", get(messaging::ws_handler))
+        // .route("/ws:id", get(messaging::ws_handler))
+        .route("/ws", get(messaging::ws_handler))
         .route(
             "/api/*fn_name",
             get(server_fn_handler).post(server_fn_handler),
@@ -110,10 +110,10 @@ async fn main() -> std::io::Result<()> {
         .layer(SessionLayer::new(session_store))
         .with_state(app_state);
 
+    // --- start
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     logging::log!("listening on http://{}", &addr);
     axum::serve(listener, router.into_make_service()).await?;
-
     Ok(())
 }
 

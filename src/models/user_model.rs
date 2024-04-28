@@ -71,7 +71,7 @@ impl User {
 }
 
 #[cfg(feature = "ssr")]
-use crate::state::db::Database;
+use crate::{error::ApiError, state::db::Database};
 
 #[cfg(feature = "ssr")]
 impl UserData {
@@ -97,20 +97,17 @@ impl UserData {
         }
     }
 
-    pub async fn insert_into_db(&self, pool: &Database) -> Result<(), surrealdb::Error> {
+    pub async fn insert_into_db(&self, pool: &Database) -> Result<(), ApiError> {
         if pool
             .client
-            .query("SELECT * FROM type::table($table) WHERE email = $email")
-            .bind(("table", "user_data"))
+            .query("SELECT * FROM user_data WHERE email = $email")
             .bind(("email", &self.email))
             .await?
             .take::<Option<Self>>(0)
             .unwrap_or(None)
             .is_some()
         {
-            return Err(surrealdb::Error::Api(surrealdb::error::Api::InternalError(
-                "User already exist".to_string(),
-            )));
+            return Err(ApiError::EmailTaken);
         }
 
         match pool
@@ -120,43 +117,30 @@ impl UserData {
             .await
         {
             Ok(_) => Ok(()),
-            Err(err) => Err(err),
+            Err(err) => Err(ApiError::DatabaseError(err)),
         }
     }
 
-    pub async fn add_channel(
-        &self,
-        room_uuid: String,
-        pool: &Database,
-    ) -> Result<(), surrealdb::Error> {
+    pub async fn add_channel(&self, room_uuid: String, pool: &Database) -> Result<(), ApiError> {
         let find_entry = pool
             .client
             .select::<Option<Self>>(("user_data", &self.uuid))
             .await?;
 
-        if let Some(mut user_data) = find_entry {
+        if let Some(user_data) = find_entry {
             if user_data.joined_channels.contains(&room_uuid) {
-                return Err(surrealdb::Error::Api(surrealdb::error::Api::InternalError(
-                    "Already joined the channel".to_string(),
-                )));
+                return Err(ApiError::AddChannelError);
             }
-
-            user_data.joined_channels.push(room_uuid);
 
             pool.client
                 .update::<Option<Self>>(("user_data", &self.uuid))
-                .merge(user_data)
+                .patch(surrealdb::opt::PatchOp::add("/joined_channels", room_uuid))
                 .await?;
         }
-
         Ok(())
     }
 
-    pub async fn remove_channel(
-        &self,
-        channel: String,
-        pool: &Database,
-    ) -> Result<(), surrealdb::Error> {
+    pub async fn remove_channel(&self, channel: String, pool: &Database) -> Result<(), ApiError> {
         let find_entry = pool
             .client
             .select::<Option<Self>>(("user_data", &self.uuid))
@@ -164,9 +148,7 @@ impl UserData {
 
         if let Some(mut user_data) = find_entry {
             if !user_data.joined_channels.contains(&channel) {
-                return Err(surrealdb::Error::Api(surrealdb::error::Api::InternalError(
-                    "User is not in the room".to_string(),
-                )));
+                return Err(ApiError::RemoveChannelError);
             }
             user_data
                 .joined_channels
@@ -181,10 +163,7 @@ impl UserData {
         Ok(())
     }
 
-    pub async fn get_from_email(
-        email: &str,
-        pool: &Database,
-    ) -> Result<Option<Self>, surrealdb::Error> {
+    pub async fn get_from_email(email: &str, pool: &Database) -> Result<Option<Self>, ApiError> {
         match pool
             .client
             .query("SELECT * FROM type::table($table) WHERE email = $email")
@@ -192,8 +171,10 @@ impl UserData {
             .bind(("email", email))
             .await
         {
-            Ok(mut maybe_user) => maybe_user.take::<Option<Self>>(0),
-            Err(err) => Err(err),
+            Ok(mut maybe_user) => maybe_user
+                .take::<Option<Self>>(0)
+                .map_err(|err| ApiError::DatabaseError(err)),
+            Err(err) => Err(ApiError::DatabaseError(err)),
         }
     }
 
