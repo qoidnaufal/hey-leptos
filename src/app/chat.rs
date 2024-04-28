@@ -6,19 +6,30 @@ use super::{
 };
 use leptos::*;
 use leptos_router::Outlet;
+use leptos_use::{use_websocket, UseWebsocketReturn};
+use std::rc::Rc;
+
+#[derive(Clone)]
+pub struct WebsocketCtx {
+    pub send: Rc<dyn Fn(&str)>,
+    pub message_bytes: Signal<Option<Vec<u8>>>,
+}
+
+impl WebsocketCtx {
+    fn new(send: Rc<dyn Fn(&str)>, message_bytes: Signal<Option<Vec<u8>>>) -> Self {
+        Self {
+            send,
+            message_bytes,
+        }
+    }
+}
 
 #[component]
 pub fn ChatPage(logout_action: LogoutAction) -> impl IntoView {
-    provide_context(logout_action);
-
     let (display_room_form, set_display_room_form) = create_signal(false);
     let (display_user_menu, set_display_user_menu) = create_signal(false);
-
-    // ---- handle channels fetching
-
     let create_room_action = create_server_action::<CreateNewRoom>();
     let join_room_action = create_server_action::<JoinRoom>();
-
     let channels_resource = create_local_resource(
         move || {
             (
@@ -28,10 +39,15 @@ pub fn ChatPage(logout_action: LogoutAction) -> impl IntoView {
         },
         |_| fetch_joined_channels(),
     );
-
     let user_resource = create_resource(|| (), |_| get_avatar_and_name());
-
+    let UseWebsocketReturn {
+        send,
+        message_bytes,
+        ..
+    } = use_websocket("ws://localhost:4321/ws");
+    provide_context(logout_action);
     provide_context(user_resource);
+    provide_context(WebsocketCtx::new(Rc::new(send), message_bytes));
 
     view! {
         <div class="block absolute m-auto left-0 right-0 top-0 bottom-0 w-[91.6667%] h-[91.6667%] max-h-[91.6667%] max-w-[91.6667%] flex flex-row bg-slate-800/[.65] rounded-xl">

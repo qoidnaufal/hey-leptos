@@ -8,7 +8,6 @@ pub async fn get_avatar_and_name() -> Result<User, ServerFnError> {
     use crate::state::auth;
 
     let auth = auth()?;
-
     let current_user = auth
         .current_user
         .ok_or_else(|| ServerFnError::new("Auth does not contain user"))?;
@@ -31,8 +30,6 @@ pub fn CurrentUser(
             set_display_user_menu.set(false)
         }
     };
-
-    // let user_resource = create_resource(|| (), |_| get_avatar_and_name());
 
     view! {
         <div class="select-none bg-slate-900/[.65] w-auto h-[50px] flex flex-row pl-2 items-center rounded-tl-xl">
@@ -72,6 +69,7 @@ pub fn CurrentUser(
 #[component]
 pub fn UserMenu(display_user_menu: ReadSignal<bool>) -> impl IntoView {
     let logout_action = expect_context::<LogoutAction>();
+
     view! {
         <Show when=move || display_user_menu.get()>
             <div class="block relative flex flex-col bg-slate-900 select-none left-[120px] w-[250px]">

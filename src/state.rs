@@ -30,3 +30,8 @@ pub fn pool() -> Result<Database, ServerFnError> {
 pub fn auth() -> Result<AuthSession, ServerFnError> {
     use_context::<AuthSession>().ok_or_else(|| ServerFnError::new("No AuthSession is detected!"))
 }
+
+#[cfg(feature = "ssr")]
+pub fn rooms_manager() -> Result<RoomsManager, ServerFnError> {
+    use_context::<RoomsManager>().ok_or_else(|| ServerFnError::new("No RoomsManager is detected!"))
+}
