@@ -6,14 +6,14 @@ use {
             message_model::{MsgResponse, WsPayload},
             user_model::User,
         },
-        state::rooms_manager::Room,
+        state::rooms_manager::RoomData,
     },
     chrono::Local,
     leptos::*,
 };
 
 #[server]
-async fn validate_path(path: String) -> Result<Room, ServerFnError> {
+async fn validate_path(path: String) -> Result<RoomData, ServerFnError> {
     use crate::state::{auth, pool, rooms_manager};
 
     let auth = auth()?;

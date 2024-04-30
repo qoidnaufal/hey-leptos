@@ -7,14 +7,14 @@ use {
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Room {
+pub struct RoomData {
     pub room_name: String,
     pub room_uuid: String,
     pub users: HashMap<String, User>,
     pub created_at: DateTime<Utc>,
 }
 
-impl Room {
+impl RoomData {
     pub fn new(room_name: String, created_at: DateTime<Utc>) -> Self {
         let room_uuid = Uuid::new_v4().as_simple().to_string();
         let users = HashMap::<String, User>::new();
@@ -47,7 +47,8 @@ impl Room {
 
 #[cfg(feature = "ssr")]
 use {
-    crate::{models::message_model::WsPayload, state::db::Database},
+    crate::state::db::Database,
+    axum::extract::ws::Message,
     std::sync::{Arc, RwLock},
     tokio::sync::broadcast,
 };
@@ -57,25 +58,21 @@ use {
 pub struct ChatRoom {
     pub uuid: String,
     pub name: String,
-    pub channel: Option<broadcast::Sender<WsPayload>>,
+    pub sender: Option<broadcast::Sender<Message>>,
 }
 
 #[cfg(feature = "ssr")]
 impl ChatRoom {
-    pub fn from_room_data(room: &Room) -> Self {
-        let uuid = room.room_uuid.clone();
-        let name = room.room_name.clone();
-        let (tx, _) = broadcast::channel::<WsPayload>(100);
-        let channel = Some(tx);
-        Self {
-            uuid,
-            name,
-            channel,
-        }
+    pub fn from_room_data(room_data: &RoomData) -> Self {
+        let uuid = room_data.room_uuid.clone();
+        let name = room_data.room_name.clone();
+        let (tx, _) = broadcast::channel::<Message>(100);
+        let sender = Some(tx);
+        Self { uuid, name, sender }
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<WsPayload> {
-        self.channel
+    pub fn subscribe(&self) -> broadcast::Receiver<Message> {
+        self.sender
             .as_ref()
             .expect("tx must be assigned")
             .subscribe()
@@ -85,7 +82,7 @@ impl ChatRoom {
 #[cfg(feature = "ssr")]
 #[derive(Debug, Clone, Default)]
 pub struct RoomsManager {
-    pub channels: Arc<RwLock<HashMap<String, ChatRoom>>>,
+    pub rooms: Arc<RwLock<HashMap<String, ChatRoom>>>,
 }
 
 #[cfg(feature = "ssr")]
@@ -97,20 +94,20 @@ impl RoomsManager {
         pool: &Database,
         created_at: DateTime<Utc>,
     ) -> Result<String, ApiError> {
-        let mut room = Room::new(room_name, created_at);
-        room.insert_user(user)?;
+        let mut room_data = RoomData::new(room_name, created_at);
+        room_data.insert_user(user)?;
         pool.client
-            .create::<Option<Room>>(("room_data", &room.room_uuid))
-            .content(room.clone())
+            .create::<Option<RoomData>>(("room_data", &room_data.room_uuid))
+            .content(room_data.clone())
             .await?;
         {
-            let chat_room = ChatRoom::from_room_data(&room);
-            let mut channels = self.channels.write().unwrap();
-            if !channels.contains_key(&chat_room.uuid) {
-                channels.insert(chat_room.uuid.clone(), chat_room);
+            let chatroom = ChatRoom::from_room_data(&room_data);
+            let mut rooms = self.rooms.write().unwrap();
+            if !rooms.contains_key(&chatroom.uuid) {
+                rooms.insert(chatroom.uuid.clone(), chatroom);
             }
         }
-        Ok(room.room_uuid)
+        Ok(room_data.room_uuid)
     }
 
     pub async fn join_room(
@@ -121,13 +118,13 @@ impl RoomsManager {
     ) -> Result<(), ApiError> {
         let find_entry = pool
             .client
-            .select::<Option<Room>>(("room_data", room_uuid))
+            .select::<Option<RoomData>>(("room_data", room_uuid))
             .await?;
-        if let Some(mut room) = find_entry {
-            room.insert_user(user)?;
+        if let Some(mut room_data) = find_entry {
+            room_data.insert_user(user)?;
             pool.client
-                .update::<Option<Room>>(("room_data", &room.room_uuid))
-                .merge(room)
+                .update::<Option<RoomData>>(("room_data", &room_data.room_uuid))
+                .merge(room_data)
                 .await?;
         }
         Ok(())
@@ -141,13 +138,13 @@ impl RoomsManager {
     ) -> Result<(), ApiError> {
         let find_entry = pool
             .client
-            .select::<Option<Room>>(("room_data", room_uuid))
+            .select::<Option<RoomData>>(("room_data", room_uuid))
             .await?;
-        if let Some(mut room) = find_entry {
-            room.remove_user(user)?;
+        if let Some(mut room_data) = find_entry {
+            room_data.remove_user(user)?;
             pool.client
-                .update::<Option<Room>>(("room_data", &room.room_uuid))
-                .merge(room)
+                .update::<Option<RoomData>>(("room_data", &room_data.room_uuid))
+                .merge(room_data)
                 .await?;
         }
         Ok(())
@@ -160,21 +157,25 @@ impl RoomsManager {
     ) -> Result<String, ApiError> {
         let find_entry = pool
             .client
-            .select::<Option<Room>>(("room_data", room_uuid))
+            .select::<Option<RoomData>>(("room_data", room_uuid))
             .await?;
         match find_entry {
-            Some(room) => Ok(room.room_name),
+            Some(room_data) => Ok(room_data.room_name),
             None => Err(ApiError::RoomDoesNotExist),
         }
     }
 
-    pub async fn validate_uuid(&self, room_uuid: &str, pool: &Database) -> Result<Room, ApiError> {
+    pub async fn validate_uuid(
+        &self,
+        room_uuid: &str,
+        pool: &Database,
+    ) -> Result<RoomData, ApiError> {
         let find_entry = pool
             .client
-            .select::<Option<Room>>(("room_data", room_uuid))
+            .select::<Option<RoomData>>(("room_data", room_uuid))
             .await?;
         match find_entry {
-            Some(room) => Ok(room),
+            Some(room_data) => Ok(room_data),
             None => Err(ApiError::RoomDoesNotExist),
         }
     }
