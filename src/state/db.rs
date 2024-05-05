@@ -1,8 +1,11 @@
 #[cfg(feature = "ssr")]
-use surrealdb::{
-    engine::remote::ws::{Client, Ws},
-    opt::auth::Root,
-    Error, Surreal,
+use {
+    crate::error::ServerError,
+    surrealdb::{
+        engine::remote::ws::{Client, Ws},
+        opt::auth::Root,
+        Surreal,
+    },
 };
 
 #[cfg(feature = "ssr")]
@@ -17,7 +20,7 @@ pub struct Database {
 
 #[cfg(feature = "ssr")]
 impl Database {
-    pub async fn init() -> Result<Self, Error> {
+    pub async fn init() -> Result<Self, ServerError> {
         let client = Surreal::new::<Ws>("0.0.0.0:8000").await?;
         client
             .signin(Root {

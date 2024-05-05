@@ -22,7 +22,7 @@ impl AppError {
 }
 
 #[derive(Debug, Error)]
-pub enum ApiError {
+pub enum ServerError {
     #[error("Room Does Not Exist")]
     RoomDoesNotExist,
     #[cfg(feature = "ssr")]
@@ -36,6 +36,8 @@ pub enum ApiError {
     UserDoesNotExist,
     #[error("Email Has Been Taken")]
     EmailTaken,
+    #[error("Inter Process Communication Failed")]
+    IPCFailed,
     #[error("Other: {0}")]
     Other(String),
 }

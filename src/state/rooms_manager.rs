@@ -1,5 +1,5 @@
 use {
-    crate::{error::ApiError, models::user_model::User},
+    crate::{error::ServerError, models::user_model::User},
     chrono::{DateTime, Utc},
     serde::{Deserialize, Serialize},
     std::collections::HashMap,
@@ -26,31 +26,30 @@ impl RoomData {
         }
     }
 
-    pub fn insert_user(&mut self, user: User) -> Result<(), ApiError> {
+    pub fn insert_user(&mut self, user: User) -> Result<(), ServerError> {
         if !self.users.contains_key(&user.uuid) {
             self.users.insert(user.uuid.clone(), user);
             Ok(())
         } else {
-            Err(ApiError::AddChannelError)
+            Err(ServerError::AddChannelError)
         }
     }
 
-    pub fn remove_user(&mut self, user: User) -> Result<(), ApiError> {
+    pub fn remove_user(&mut self, user: User) -> Result<(), ServerError> {
         if self.users.contains_key(&user.uuid) {
             self.users.retain(|k, _| *k != user.uuid);
             Ok(())
         } else {
-            Err(ApiError::UserDoesNotExist)
+            Err(ServerError::UserDoesNotExist)
         }
     }
 }
 
 #[cfg(feature = "ssr")]
 use {
-    crate::state::db::Database,
-    axum::extract::ws::Message,
+    crate::{models::message_model::WsPayload, state::db::Database},
     std::sync::{Arc, RwLock},
-    tokio::sync::broadcast,
+    tokio::sync::{broadcast, mpsc},
 };
 
 #[cfg(feature = "ssr")]
@@ -58,7 +57,7 @@ use {
 pub struct ChatRoom {
     pub uuid: String,
     pub name: String,
-    pub sender: Option<broadcast::Sender<Message>>,
+    pub users: Arc<RwLock<HashMap<String, Option<mpsc::UnboundedSender<WsPayload>>>>>,
 }
 
 #[cfg(feature = "ssr")]
@@ -66,48 +65,53 @@ impl ChatRoom {
     pub fn from_room_data(room_data: &RoomData) -> Self {
         let uuid = room_data.room_uuid.clone();
         let name = room_data.room_name.clone();
-        let (tx, _) = broadcast::channel::<Message>(100);
-        let sender = Some(tx);
-        Self { uuid, name, sender }
-    }
-
-    pub fn subscribe(&self) -> broadcast::Receiver<Message> {
-        self.sender
-            .as_ref()
-            .expect("tx must be assigned")
-            .subscribe()
+        let users = Arc::new(RwLock::new(HashMap::<
+            String,
+            Option<mpsc::UnboundedSender<WsPayload>>,
+        >::new()));
+        Self { uuid, name, users }
     }
 }
 
 #[cfg(feature = "ssr")]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RoomsManager {
-    pub rooms: Arc<RwLock<HashMap<String, ChatRoom>>>,
+    pub chatrooms: Arc<RwLock<HashMap<String, ChatRoom>>>,
+    pub ipc_sender: broadcast::Sender<ChatRoom>,
 }
 
 #[cfg(feature = "ssr")]
 impl RoomsManager {
+    pub fn init() -> Self {
+        let chatrooms = Arc::new(RwLock::new(HashMap::<String, ChatRoom>::new()));
+        let (ipc_sender, _) = broadcast::channel(1024);
+        Self {
+            chatrooms,
+            ipc_sender,
+        }
+    }
+
     pub async fn new_room(
         &self,
         room_name: String,
         user: User,
         pool: &Database,
         created_at: DateTime<Utc>,
-    ) -> Result<String, ApiError> {
+    ) -> Result<String, ServerError> {
         let mut room_data = RoomData::new(room_name, created_at);
         room_data.insert_user(user)?;
-        pool.client
-            .create::<Option<RoomData>>(("room_data", &room_data.room_uuid))
-            .content(room_data.clone())
-            .await?;
+        let room_uuid = room_data.room_uuid.clone();
         {
             let chatroom = ChatRoom::from_room_data(&room_data);
-            let mut rooms = self.rooms.write().unwrap();
-            if !rooms.contains_key(&chatroom.uuid) {
-                rooms.insert(chatroom.uuid.clone(), chatroom);
-            }
+            self.ipc_sender
+                .send(chatroom)
+                .map_err(|_| ServerError::IPCFailed)?;
         }
-        Ok(room_data.room_uuid)
+        pool.client
+            .create::<Option<RoomData>>(("room_data", &room_data.room_uuid))
+            .content(room_data)
+            .await?;
+        Ok(room_uuid)
     }
 
     pub async fn join_room(
@@ -115,7 +119,7 @@ impl RoomsManager {
         room_uuid: &str,
         user: User,
         pool: &Database,
-    ) -> Result<(), ApiError> {
+    ) -> Result<(), ServerError> {
         let find_entry = pool
             .client
             .select::<Option<RoomData>>(("room_data", room_uuid))
@@ -124,8 +128,15 @@ impl RoomsManager {
             room_data.insert_user(user)?;
             pool.client
                 .update::<Option<RoomData>>(("room_data", &room_data.room_uuid))
-                .merge(room_data)
+                .merge(room_data.clone())
                 .await?;
+            {
+                let chatrooms = self.chatrooms.read().unwrap();
+                let chatroom = chatrooms.get(&room_data.room_uuid).unwrap();
+                self.ipc_sender
+                    .send(chatroom.clone())
+                    .map_err(|_| ServerError::IPCFailed)?;
+            }
         }
         Ok(())
     }
@@ -135,7 +146,7 @@ impl RoomsManager {
         room_uuid: &str,
         user: User,
         pool: &Database,
-    ) -> Result<(), ApiError> {
+    ) -> Result<(), ServerError> {
         let find_entry = pool
             .client
             .select::<Option<RoomData>>(("room_data", room_uuid))
@@ -154,14 +165,14 @@ impl RoomsManager {
         &self,
         room_uuid: &str,
         pool: &Database,
-    ) -> Result<String, ApiError> {
+    ) -> Result<String, ServerError> {
         let find_entry = pool
             .client
             .select::<Option<RoomData>>(("room_data", room_uuid))
             .await?;
         match find_entry {
             Some(room_data) => Ok(room_data.room_name),
-            None => Err(ApiError::RoomDoesNotExist),
+            None => Err(ServerError::RoomDoesNotExist),
         }
     }
 
@@ -169,14 +180,14 @@ impl RoomsManager {
         &self,
         room_uuid: &str,
         pool: &Database,
-    ) -> Result<RoomData, ApiError> {
+    ) -> Result<RoomData, ServerError> {
         let find_entry = pool
             .client
             .select::<Option<RoomData>>(("room_data", room_uuid))
             .await?;
         match find_entry {
             Some(room_data) => Ok(room_data),
-            None => Err(ApiError::RoomDoesNotExist),
+            None => Err(ServerError::RoomDoesNotExist),
         }
     }
 }

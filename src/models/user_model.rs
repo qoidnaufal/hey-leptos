@@ -71,7 +71,7 @@ impl User {
 }
 
 #[cfg(feature = "ssr")]
-use crate::{error::ApiError, state::db::Database};
+use crate::{error::ServerError, state::db::Database};
 
 #[cfg(feature = "ssr")]
 impl UserData {
@@ -97,7 +97,7 @@ impl UserData {
         }
     }
 
-    pub async fn insert_into_db(&self, pool: &Database) -> Result<(), ApiError> {
+    pub async fn insert_into_db(&self, pool: &Database) -> Result<(), ServerError> {
         if pool
             .client
             .query("SELECT * FROM user_data WHERE email = $email")
@@ -107,7 +107,7 @@ impl UserData {
             .unwrap_or(None)
             .is_some()
         {
-            return Err(ApiError::EmailTaken);
+            return Err(ServerError::EmailTaken);
         }
 
         match pool
@@ -117,11 +117,11 @@ impl UserData {
             .await
         {
             Ok(_) => Ok(()),
-            Err(err) => Err(ApiError::DatabaseError(err)),
+            Err(err) => Err(ServerError::DatabaseError(err)),
         }
     }
 
-    pub async fn add_channel(&self, room_uuid: String, pool: &Database) -> Result<(), ApiError> {
+    pub async fn add_channel(&self, room_uuid: String, pool: &Database) -> Result<(), ServerError> {
         let find_entry = pool
             .client
             .select::<Option<Self>>(("user_data", &self.uuid))
@@ -129,7 +129,7 @@ impl UserData {
 
         if let Some(user_data) = find_entry {
             if user_data.joined_channels.contains(&room_uuid) {
-                return Err(ApiError::AddChannelError);
+                return Err(ServerError::AddChannelError);
             }
 
             pool.client
@@ -140,7 +140,11 @@ impl UserData {
         Ok(())
     }
 
-    pub async fn remove_channel(&self, channel: String, pool: &Database) -> Result<(), ApiError> {
+    pub async fn remove_channel(
+        &self,
+        channel: String,
+        pool: &Database,
+    ) -> Result<(), ServerError> {
         let find_entry = pool
             .client
             .select::<Option<Self>>(("user_data", &self.uuid))
@@ -148,7 +152,7 @@ impl UserData {
 
         if let Some(mut user_data) = find_entry {
             if !user_data.joined_channels.contains(&channel) {
-                return Err(ApiError::RemoveChannelError);
+                return Err(ServerError::RemoveChannelError);
             }
             user_data
                 .joined_channels
@@ -163,7 +167,7 @@ impl UserData {
         Ok(())
     }
 
-    pub async fn get_from_email(email: &str, pool: &Database) -> Result<Option<Self>, ApiError> {
+    pub async fn get_from_email(email: &str, pool: &Database) -> Result<Option<Self>, ServerError> {
         match pool
             .client
             .query("SELECT * FROM type::table($table) WHERE email = $email")
@@ -173,8 +177,8 @@ impl UserData {
         {
             Ok(mut maybe_user) => maybe_user
                 .take::<Option<Self>>(0)
-                .map_err(|err| ApiError::DatabaseError(err)),
-            Err(err) => Err(ApiError::DatabaseError(err)),
+                .map_err(|err| ServerError::DatabaseError(err)),
+            Err(err) => Err(ServerError::DatabaseError(err)),
         }
     }
 

@@ -22,7 +22,7 @@ impl JoinedChannel {
 #[server(FetchJoinedChannels, "/api", "GetJson")]
 pub async fn fetch_joined_channels() -> Result<Vec<JoinedChannel>, ServerFnError> {
     use crate::{
-        error::ApiError,
+        error::ServerError,
         models::user_model::UserData,
         state::{auth, pool, rooms_manager},
     };
@@ -42,7 +42,7 @@ pub async fn fetch_joined_channels() -> Result<Vec<JoinedChannel>, ServerFnError
         .iter()
         .map(|room_uuid| async {
             let room_name = rooms_manager.get_room_name(room_uuid, &pool).await?;
-            Ok::<JoinedChannel, ApiError>(JoinedChannel::new(room_uuid.clone(), room_name))
+            Ok::<JoinedChannel, ServerError>(JoinedChannel::new(room_uuid.clone(), room_name))
         })
         .map(|res| async { res.await.unwrap_or_default() });
     let joined_channels = join_all(joined_channels).await;
