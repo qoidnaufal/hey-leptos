@@ -13,16 +13,13 @@ pub async fn create_new_room(room_name: String) -> Result<(), ServerFnError> {
     let auth = auth()?;
     let pool = pool()?;
     let rooms_manager = rooms_manager()?;
-
     let user = auth
         .current_user
         .ok_or_else(|| ServerFnError::new("Auth does not contain user"))?;
     let user_data = UserData::get_from_uuid(&user.uuid, &pool)
         .await
         .ok_or_else(|| ServerFnError::new("User does not exist"))?;
-
     let created_at = Utc::now();
-
     match rooms_manager
         .new_room(room_name.clone(), user, &pool, created_at)
         .await
@@ -31,13 +28,12 @@ pub async fn create_new_room(room_name: String) -> Result<(), ServerFnError> {
             user_data
                 .add_channel(room_uuid.clone(), &pool)
                 .await
-                .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
-
+                .map_err(|err| ServerFnError::new(err))?;
             Ok(leptos_axum::redirect(
                 &AppPath::Channel(Some(room_uuid)).to_string(),
             ))
         }
-        Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
+        Err(err) => Err(ServerFnError::new(err)),
     }
 }
 
@@ -52,25 +48,23 @@ pub async fn join_room(room_uuid: String) -> Result<(), ServerFnError> {
     let auth = auth()?;
     let pool = pool()?;
     let rooms_manager = rooms_manager()?;
-
     let user = auth
         .current_user
         .ok_or_else(|| ServerFnError::new("Auth does not contain user"))?;
-
     let user_data = UserData::get_from_uuid(&user.uuid, &pool)
         .await
         .ok_or_else(|| ServerFnError::new("User does not exist"))?;
-
-    user_data
-        .add_channel(room_uuid.clone(), &pool)
-        .await
-        .map_err(|err| ServerFnError::new(format!("{:?}", err)))?;
-
     match rooms_manager.join_room(&room_uuid, user, &pool).await {
-        Ok(_) => Ok(leptos_axum::redirect(
-            &AppPath::Channel(Some(room_uuid)).to_string(),
-        )),
-        Err(err) => Err(ServerFnError::new(format!("{:?}", err))),
+        Ok(_) => {
+            user_data
+                .add_channel(room_uuid.clone(), &pool)
+                .await
+                .map_err(|err| ServerFnError::new(err))?;
+            Ok(leptos_axum::redirect(
+                &AppPath::Channel(Some(room_uuid)).to_string(),
+            ))
+        }
+        Err(err) => Err(ServerFnError::new(err)),
     }
 }
 
@@ -82,7 +76,6 @@ pub fn PopUpRoomForm(
 ) -> impl IntoView {
     let (show_cr, set_show_cr) = create_signal("hidden");
     let (show_join, set_show_join) = create_signal("hidden");
-
     let show_create_form = move |_| {
         if show_cr.get() == "hidden" {
             set_show_cr.set("block flex flex-col");
@@ -91,7 +84,6 @@ pub fn PopUpRoomForm(
             set_show_cr.set("hidden")
         }
     };
-
     let show_join_form = move |_| {
         if show_join.get() == "hidden" {
             set_show_join.set("block flex flex-col");
@@ -106,7 +98,6 @@ pub fn PopUpRoomForm(
             {
                 let cr_node = create_node_ref::<html::Input>();
                 let join_node = create_node_ref::<html::Input>();
-
                 let cnr = move |ev: ev::SubmitEvent| {
                     ev.prevent_default();
                     let room_name = cr_node.get().expect("input element does not exist").value();
@@ -116,7 +107,6 @@ pub fn PopUpRoomForm(
                         .expect("input element does not exist")
                         .set_value("");
                 };
-
                 let jtr = move |ev: ev::SubmitEvent| {
                     ev.prevent_default();
                     let room_uuid = join_node

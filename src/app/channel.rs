@@ -49,13 +49,6 @@ async fn publish_msg(text: String, room_uuid: String) -> Result<(), ServerFnErro
         .current_user
         .ok_or_else(|| ServerFnError::new("Auth does not contain user"))?;
     let created_at = Utc::now();
-    logging::log!(
-        "[{}] > on channel: {}:\n                                 > {} published: {:?}\n",
-        &created_at,
-        &room_uuid,
-        &user.user_name,
-        &text
-    );
     let msg_data = MsgData::new(room_uuid.clone(), user.uuid, text, created_at);
     msg_data
         .insert_into_db(&pool)
@@ -128,7 +121,12 @@ pub fn Channel() -> impl IntoView {
                             if let Some(bytes) = message_bytes.get() {
                                 let msg = serde_json::from_slice::<WsPayload>(&bytes).unwrap();
                                 match msg.op_code {
-                                    11 =>  msg_resource.refetch(),
+                                    11 => {
+                                            let room_uuid = path.get().strip_prefix("/channel").expect("Provide valid uuid!").to_string();
+                                            if msg.message == room_uuid {
+                                                msg_resource.refetch();
+                                            }
+                                        },
                                      n => logging::log!("not yet registered op_code: {}", n)
                                 }
                             }
@@ -222,7 +220,7 @@ fn MessageBubble(
     user_resource: Resource<(), Result<User, ServerFnError>>,
 ) -> impl IntoView {
     let sender = move || {
-        msg.get().msg_sender.unwrap().user_name
+        msg.get().msg_sender.unwrap_or_default().user_name
             == user_resource
                 .map(|user| user.clone().unwrap_or_default().user_name)
                 .unwrap_or_default()
@@ -233,7 +231,7 @@ fn MessageBubble(
     view! {
         <li class=move || if sender() { sender_class } else { receiver_class }>
             <div class="flex flex-shrink-0 justify-center items-center pb-1 size-9 bg-sky-500 rounded-full text-white hover:text-black hover:bg-green-300 uppercase font-sans text-2xl text-center">
-                {move || msg.get().msg_sender.unwrap().avatar.get_view()}
+                {move || msg.get().msg_sender.unwrap_or_default().avatar.get_view()}
             </div>
             <div class=move || if sender() { "flex flex-col mr-2 rounded-l-lg rounded-br-lg bg-green-300 px-2 max-w-[500px]" } else { "flex flex-col ml-2 rounded-r-lg rounded-bl-lg bg-slate-300 px-2 max-w-[500px]" }>
                 <div class=move || if sender() { "flex flex-row flex-wrap justify-end" } else { "flex flex-row content-start" }>
@@ -244,7 +242,7 @@ fn MessageBubble(
                                     {move || msg.get().created_at.with_timezone(&Local).format("%d/%m/%Y %H:%M").to_string()}
                                 </span>
                                 <span class="font-sans text-indigo-500 text-lg">
-                                    {move || msg.get().msg_sender.unwrap().user_name}
+                                    {move || msg.get().msg_sender.unwrap_or_default().user_name}
                                 </span>
                             </p>
                         }
@@ -252,7 +250,7 @@ fn MessageBubble(
                         view! {
                             <p>
                                 <span class="font-sans text-indigo-500 text-lg">
-                                    {move || msg.get().msg_sender.unwrap().user_name}
+                                    {move || msg.get().msg_sender.unwrap_or_default().user_name}
                                 </span>
                                 <span class="font-sans text-black/[.65] text-xs ml-2">
                                     {move || msg.get().created_at.with_timezone(&Local).format("%d/%m/%Y %H:%M").to_string()}

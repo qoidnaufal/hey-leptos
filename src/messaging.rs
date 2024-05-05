@@ -1,7 +1,7 @@
 #[cfg(feature = "ssr")]
 use {
     crate::{
-        models::{message_model::WsPayload, user_model::UserData},
+        models::{message_model::WsPayload, user_model::User},
         state::{auth::AuthSession, rooms_manager::RoomsManager, AppState},
     },
     axum::{
@@ -13,6 +13,7 @@ use {
         response::IntoResponse,
     },
     futures::{SinkExt, StreamExt},
+    tokio::sync::mpsc,
 };
 
 #[cfg(feature = "ssr")]
@@ -21,55 +22,53 @@ pub async fn ws_handler(
     auth_session: AuthSession,
     State(app_state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let pool = app_state.pool;
     let rooms_manager = app_state.rooms_manager;
-    let user = auth_session.current_user.ok_or(StatusCode::UNAUTHORIZED)?;
-    let user_data = UserData::get_from_uuid(&user.uuid, &pool)
-        .await
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(ws.on_upgrade(|socket| handle_connection(socket, user_data, rooms_manager)))
+    let user = auth_session
+        .current_user
+        .expect("AuthSession should contains user information");
+    Ok(ws.on_upgrade(|socket| handle_connection(socket, user, rooms_manager)))
 }
 
 #[cfg(feature = "ssr")]
-async fn handle_connection(ws: WebSocket, user_data: UserData, rooms_manager: RoomsManager) {
-    let (mut server, mut from_client) = ws.split();
-    {
-        let mut stream_map = tokio_stream::StreamMap::new();
-        rooms_manager
-            .rooms
-            .read()
-            .unwrap()
-            .iter()
-            .for_each(|(_, chatroom)| {
-                let mut rx = chatroom.subscribe();
-                let rx = Box::pin(async_stream::stream! {
-                    while let Ok(msg) = rx.recv().await { yield msg; }
-                })
-                    as std::pin::Pin<Box<dyn futures::Stream<Item = Message> + Send>>;
-                stream_map.insert(chatroom.uuid.clone(), rx);
-            });
-        tokio::spawn(async move {
-            while let Some((_, msg)) = stream_map.next().await {
-                server
-                    .send(msg)
-                    .await
-                    .map_err(|err| leptos::logging::log!("ERROR: {:?}", err))?;
+async fn handle_connection(ws: WebSocket, user: User, rooms_manager: RoomsManager) {
+    let (mut ws_sender, mut ws_reader) = ws.split();
+    let (tx, mut rx) = mpsc::unbounded_channel::<WsPayload>();
+    let mut ipc_receiver = rooms_manager.ipc_sender.subscribe();
+
+    let chatrooms = rooms_manager.chatrooms.clone();
+    let user_uuid = user.uuid.clone();
+
+    // --- Receive notification when user create or join to a new channel
+    tokio::spawn(async move {
+        while let Ok(chatroom) = ipc_receiver.recv().await {
+            let mut users = chatroom.users.write().unwrap();
+            users.insert(user_uuid.clone(), Some(tx.clone()));
+            let mut chatrooms = chatrooms.write().unwrap();
+            chatrooms.insert(chatroom.uuid.clone(), chatroom.clone());
+        }
+    });
+
+    // --- Send back the message to the client
+    tokio::spawn(async move {
+        while let Some(channel_payload) = rx.recv().await {
+            let msg = serde_json::to_vec(&channel_payload).unwrap();
+            let msg = Message::Binary(msg);
+            if ws_sender.send(msg).await.is_err() {
+                break;
             }
-            server
-                .close()
-                .await
-                .map_err(|err| leptos::logging::log!("ERROR: {:?}", err))?;
-            Ok::<(), ()>(())
-        });
-    }
-    while let Some(Ok(ws_message)) = from_client.next().await {
+        }
+        // let _ = ws_sender.close();
+    });
+
+    // --- Receive message from the client
+    while let Some(Ok(ws_message)) = ws_reader.next().await {
         let channel_payload = modify_msg(ws_message);
-        broadcast_msg(channel_payload, &user_data, &rooms_manager).await;
+        broadcast_msg(channel_payload, &rooms_manager).await;
     }
 }
 
 #[cfg(feature = "ssr")]
-fn modify_msg(ws_message: Message) -> Message {
+fn modify_msg(ws_message: Message) -> WsPayload {
     let recv_payload = match ws_message {
         Message::Text(text) => {
             serde_json::from_str::<WsPayload>(&text).unwrap_or_else(|_| WsPayload::default())
@@ -80,23 +79,17 @@ fn modify_msg(ws_message: Message) -> Message {
         1 => WsPayload::new(11, recv_payload.message.clone()),
         _ => WsPayload::default(),
     };
-    let send_payload = serde_json::to_vec(&modified_response).unwrap();
-    Message::Binary(send_payload)
+    modified_response
 }
 
 #[cfg(feature = "ssr")]
-async fn broadcast_msg(
-    channel_payload: Message,
-    user_data: &UserData,
-    rooms_manager: &RoomsManager,
-) {
-    user_data.joined_channels.iter().for_each(|room_uuid| {
-        let rooms = rooms_manager.rooms.read().unwrap();
-        let chatroom = rooms
-            .get(room_uuid)
-            .expect("Need to provide valid room uuid");
-        if let Some(tx) = &chatroom.sender {
-            tx.send(channel_payload.clone()).unwrap();
+async fn broadcast_msg(channel_payload: WsPayload, rooms_manager: &RoomsManager) {
+    let chatrooms = rooms_manager.chatrooms.read().unwrap();
+    let chatroom = chatrooms.get(&channel_payload.message).unwrap(); // unwrap here is dangerous
+    let users = chatroom.users.read().unwrap();
+    for (_, channel) in users.iter() {
+        if let Some(tx) = channel {
+            let _ = tx.send(channel_payload.clone());
         }
-    })
+    }
 }

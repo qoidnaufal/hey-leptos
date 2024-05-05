@@ -62,7 +62,7 @@ async fn main() -> std::io::Result<()> {
     let pool = db::Database::init()
         .await
         .map_err(|err| std::io::Error::other(err))?;
-    let rooms_manager = rooms_manager::RoomsManager::default();
+    let rooms_manager = rooms_manager::RoomsManager::init();
     let conf = get_configuration(None)
         .await
         .map_err(|err| std::io::Error::other(err))?;
@@ -110,7 +110,7 @@ async fn main() -> std::io::Result<()> {
         .layer(SessionLayer::new(session_store))
         .with_state(app_state);
 
-    // --- start
+    // --- Serve
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     logging::log!("listening on http://{}", &addr);
     axum::serve(listener, router.into_make_service()).await?;

@@ -11,9 +11,6 @@ pub async fn get_avatar_and_name() -> Result<User, ServerFnError> {
     let current_user = auth
         .current_user
         .ok_or_else(|| ServerFnError::new("Auth does not contain user"))?;
-
-    // std::thread::sleep(std::time::Duration::from_millis(1500));
-
     Ok(current_user)
 }
 
