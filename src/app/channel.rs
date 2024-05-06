@@ -89,11 +89,7 @@ pub fn Channel() -> impl IntoView {
                 match path_resource.get().unwrap_or(Err(ServerFnError::new("Invalid path"))) {
                     Ok(room) => {
                         let WebsocketCtx { send, message_bytes } = expect_context::<WebsocketCtx>();
-                        // let room_uuid = path.get();
-                        // let room_uuid = room_uuid
-                        //     .strip_prefix("/channel/")
-                        //     .expect("Provide valid uuid!");
-                        // let UseWebsocketReturn { open, close, send, message_bytes, .. } = use_websocket(&format!("ws://localhost:4321/ws/{}", room_uuid));
+                        // i suspect multiple path.get() causes fetch_msg to be called multiple times
                         let msg_resource = create_resource(move || path.get(), fetch_msg);
                         let message_input = create_node_ref::<html::Div>();
                         let publish_msg = create_server_action::<PublishMsg>();
@@ -122,7 +118,7 @@ pub fn Channel() -> impl IntoView {
                                 let msg = serde_json::from_slice::<WsPayload>(&bytes).unwrap();
                                 match msg.op_code {
                                     11 => {
-                                            let room_uuid = path.get().strip_prefix("/channel").expect("Provide valid uuid!").to_string();
+                                            let room_uuid = path.get().strip_prefix("/channel/").expect("Provide valid uuid!").to_string();
                                             if msg.message == room_uuid {
                                                 msg_resource.refetch();
                                             }

@@ -13,8 +13,12 @@ there are some areas that need a lot of improvement or even overhaul
 - auth: kinda done, maybe some activation token?
 - error: done
 
+### messaging:
+kinda done, need to handle on close message from browser when user refresh the page
+
 ### app:
 this one here too
+- some double msg_fetch detected, need to solve
 - ui layout: kinda ok but it looks to much like a `discord.clone()`
 - ui esthetics: meh, needs a lot of improvement
 - color scheme: TODO => not yet implemented
